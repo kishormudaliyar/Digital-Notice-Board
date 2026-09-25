@@ -165,6 +165,7 @@ function showToast(message) {
 
 // ===== INITIALIZATION =====
 function init() {
+    applyTheme();
     loadState();
     loadNotices();
     applyUrgencyColors();
@@ -301,6 +302,85 @@ function hexToRgba(hex, alpha = 0.08) {
     const g = (num >> 8) & 255;
     const b = num & 255;
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// ===== APPLICATION THEMING (LIGHT, DARK, CUSTOM & 5 COLOR PALETTES) =====
+function applyTheme(theme, palette) {
+    const activeTheme = theme || localStorage.getItem('theme') || 'light';
+    const activePalette = palette || localStorage.getItem('customPalette') || 'indigo';
+
+    // Set attributes on body tag
+    document.body.setAttribute('data-theme', activeTheme);
+    if (activeTheme === 'custom') {
+        document.body.setAttribute('data-palette', activePalette);
+    } else {
+        document.body.removeAttribute('data-palette');
+    }
+
+    // Update meta theme-color for browser address bar & PWA status
+    const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+    if (metaThemeColor) {
+        if (activeTheme === 'dark') {
+            metaThemeColor.setAttribute('content', '#0D1B2A');
+        } else if (activeTheme === 'custom') {
+            const headerColors = {
+                indigo: '#0F172A',
+                ocean: '#051E2F',
+                forest: '#022C22',
+                rose: '#2D0A1A',
+                amber: '#2D1F0E'
+            };
+            metaThemeColor.setAttribute('content', headerColors[activePalette] || '#0F172A');
+        } else {
+            metaThemeColor.setAttribute('content', '#1a3a52');
+        }
+    }
+
+    // Update Theme Mode Buttons in Settings
+    const btnLight = document.getElementById('themeBtnLight');
+    const btnDark = document.getElementById('themeBtnDark');
+    const btnCustom = document.getElementById('themeBtnCustom');
+
+    if (btnLight) btnLight.classList.toggle('active', activeTheme === 'light');
+    if (btnDark) btnDark.classList.toggle('active', activeTheme === 'dark');
+    if (btnCustom) btnCustom.classList.toggle('active', activeTheme === 'custom');
+
+    // Show/hide Custom Palette options
+    const customPalettesWrapper = document.getElementById('customPalettesWrapper');
+    if (customPalettesWrapper) {
+        customPalettesWrapper.style.display = (activeTheme === 'custom') ? 'block' : 'none';
+    }
+
+    // Update active state on 5 custom palette cards
+    const palettes = ['indigo', 'ocean', 'forest', 'rose', 'amber'];
+    palettes.forEach(p => {
+        const card = document.getElementById('paletteCard' + p.charAt(0).toUpperCase() + p.slice(1));
+        if (card) {
+            card.classList.toggle('active', activeTheme === 'custom' && activePalette === p);
+        }
+    });
+}
+
+function setThemeMode(theme) {
+    try {
+        localStorage.setItem('theme', theme);
+    } catch (e) {
+        console.warn('LocalStorage save failed:', e);
+    }
+    const currentPalette = localStorage.getItem('customPalette') || 'indigo';
+    applyTheme(theme, currentPalette);
+    showToast(`Switched to ${theme.charAt(0).toUpperCase() + theme.slice(1)} theme`);
+}
+
+function setCustomPalette(palette) {
+    try {
+        localStorage.setItem('theme', 'custom');
+        localStorage.setItem('customPalette', palette);
+    } catch (e) {
+        console.warn('LocalStorage save failed:', e);
+    }
+    applyTheme('custom', palette);
+    showToast(`Applied ${palette.charAt(0).toUpperCase() + palette.slice(1)} palette`);
 }
 
 function applyUrgencyColors() {
@@ -2253,6 +2333,7 @@ function deleteNotice(id) {
 function openSettings() {
     switchSettingsTab(appState.activeSettingsTab || 'notifications');
     loadNotificationSettings();
+    applyTheme();
     applyUrgencyColors();
     updateSecurityPasscodeDisplay();
     showScreen('settingsScreen');
@@ -2297,6 +2378,7 @@ function switchSettingsTab(tabName) {
     if (tabName === 'notifications') {
         renderNotificationHistory();
     } else if (tabName === 'preferences') {
+        applyTheme();
         updateSecurityPasscodeDisplay();
     }
 }

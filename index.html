@@ -19,7 +19,21 @@
 
     <title>Digital Notice Board</title>
     <link rel="stylesheet" href="css/styles.css">
-<body>
+</head>
+<body data-theme="light">
+    <!-- Immediate Theme Bootstrap to prevent FOUC on reload -->
+    <script>
+        (function() {
+            try {
+                var savedTheme = localStorage.getItem('theme') || 'light';
+                var savedPalette = localStorage.getItem('customPalette') || 'indigo';
+                document.body.setAttribute('data-theme', savedTheme);
+                if (savedTheme === 'custom') {
+                    document.body.setAttribute('data-palette', savedPalette);
+                }
+            } catch(e) {}
+        })();
+    </script>
     <!-- Real-time In-App Notification Banner -->
     <aside id="alertBanner" class="alert-banner hidden" role="alert" aria-live="assertive">
         <div class="alert-banner-badge" id="alertBannerBadge">
@@ -132,10 +146,10 @@
                         <!-- Conditional Faculty Secret Passcode (Visible ONLY for Faculty role) -->
                         <div class="form-group faculty-code-group" id="facultyCodeGroup" style="display: none;">
                             <div class="faculty-code-header">
-                                <label for="registerFacultyCodeInput" class="input-label">Faculty Security Passcode</label>
-                                <span class="security-badge-pill">Staff Only</span>
+                                <label for="registerFacultyCodeInput" class="input-label">Faculty Passcode</label>
+                              
                             </div>
-                            <input type="password" id="registerFacultyCodeInput" class="form-input security-input" placeholder="Enter staff authorization passcode">
+                            <input type="password" id="registerFacultyCodeInput" class="form-input security-input" placeholder="Password">
                             <span class="input-hint">Restricted access: Required for faculty posting privileges.</span>
                         </div>
 
@@ -561,6 +575,82 @@
 
                 <!-- TAB 2: PREFERENCES -->
                 <div id="settingsTabPreferences" class="settings-tab-panel" role="tabpanel" style="display: none;">
+                    <!-- Theme & Appearance Card -->
+                    <div class="settings-section-card" id="settingsThemeCard">
+                        <div class="section-card-header">
+                            <h3 class="section-heading">Application Appearance</h3>
+                            <p class="section-subheading">Choose your interface display theme or select a custom palette</p>
+                        </div>
+
+                        <!-- Settings Toggle: Light | Dark | Custom buttons -->
+                        <div class="theme-mode-segmented">
+                            <button type="button" class="theme-mode-btn" id="themeBtnLight" onclick="setThemeMode('light')">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="5"></circle>
+                                    <line x1="12" y1="1" x2="12" y2="3"></line>
+                                    <line x1="12" y1="21" x2="12" y2="23"></line>
+                                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                                    <line x1="1" y1="12" x2="3" y2="12"></line>
+                                    <line x1="21" y1="12" x2="23" y2="12"></line>
+                                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                                </svg>
+                                Light
+                            </button>
+                            <button type="button" class="theme-mode-btn" id="themeBtnDark" onclick="setThemeMode('dark')">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                                </svg>
+                                Dark
+                            </button>
+                            <button type="button" class="theme-mode-btn" id="themeBtnCustom" onclick="setThemeMode('custom')">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <path d="m4.93 4.93 4.24 4.24"></path>
+                                    <path d="m14.83 9.17 4.24-4.24"></path>
+                                    <path d="m14.83 14.83 4.24 4.24"></path>
+                                    <path d="m9.17 14.83-4.24 4.24"></path>
+                                </svg>
+                                Custom
+                            </button>
+                        </div>
+
+                        <!-- 5 Custom Color Palettes -->
+                        <div class="custom-palettes-wrapper" id="customPalettesWrapper" style="display: none; margin-top: 16px;">
+                            <div class="section-card-header" style="margin-bottom: 10px;">
+                                <h4 style="font-size: 13px; font-weight: 600; margin: 0;">5 Custom Color Palettes</h4>
+                            </div>
+                            <div class="custom-palette-grid">
+                                <div class="palette-option-card" id="paletteCardIndigo" onclick="setCustomPalette('indigo')">
+                                    <div class="palette-swatch-bar" style="background: linear-gradient(135deg, #0F1419 0%, #1E293B 50%, #6366F1 100%);"></div>
+                                    <span class="palette-name">Indigo</span>
+                                    <span class="palette-meta">Palette 1</span>
+                                </div>
+                                <div class="palette-option-card" id="paletteCardOcean" onclick="setCustomPalette('ocean')">
+                                    <div class="palette-swatch-bar" style="background: linear-gradient(135deg, #0A1628 0%, #082F49 50%, #0284C7 100%);"></div>
+                                    <span class="palette-name">Ocean</span>
+                                    <span class="palette-meta">Palette 2</span>
+                                </div>
+                                <div class="palette-option-card" id="paletteCardForest" onclick="setCustomPalette('forest')">
+                                    <div class="palette-swatch-bar" style="background: linear-gradient(135deg, #051F15 0%, #064E3B 50%, #059669 100%);"></div>
+                                    <span class="palette-name">Forest</span>
+                                    <span class="palette-meta">Palette 3</span>
+                                </div>
+                                <div class="palette-option-card" id="paletteCardRose" onclick="setCustomPalette('rose')">
+                                    <div class="palette-swatch-bar" style="background: linear-gradient(135deg, #1F0F15 0%, #500724 50%, #E11D48 100%);"></div>
+                                    <span class="palette-name">Rose</span>
+                                    <span class="palette-meta">Palette 4</span>
+                                </div>
+                                <div class="palette-option-card" id="paletteCardAmber" onclick="setCustomPalette('amber')">
+                                    <div class="palette-swatch-bar" style="background: linear-gradient(135deg, #18120D 0%, #54400C 50%, #F59E0B 100%);"></div>
+                                    <span class="palette-name">Amber</span>
+                                    <span class="palette-meta">Palette 5</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="settings-section-card">
                         <div class="section-card-header">
                             <h3 class="section-heading">Deadline Urgency Indicators</h3>
