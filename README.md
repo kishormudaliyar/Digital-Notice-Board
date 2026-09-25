@@ -26,7 +26,7 @@ A fully functional Digital Notice Board system built with vanilla HTML, CSS, and
 ## How to Use
 
 ### Live Demo
-Open `digital-notice-board.html` in your browser (or deploy to web server)
+Open `index.html` in your browser (or deploy to web server)
 
 ### Demo Credentials
 - **Student Login**: username = `student` (password: any)
@@ -67,10 +67,11 @@ Open `digital-notice-board.html` in your browser (or deploy to web server)
 ### Architecture
 ```
 Frontend:
-├── HTML5 (semantic structure)
-├── CSS3 (mobile-first responsive)
-├── Vanilla JavaScript (no frameworks/libraries)
-└── Service Worker (offline, caching)
+├── index.html (semantic structure)
+├── css/styles.css (mobile-first responsive styling)
+├── js/app.js (vanilla JavaScript application logic)
+├── sw.js (service worker, offline caching)
+└── manifest.json (PWA configuration)
 
 Storage:
 ├── localStorage (app state, notices)
