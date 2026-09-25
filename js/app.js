@@ -8,7 +8,7 @@
 let appState = {
     user: null,
     isAdmin: false,
-    notificationsEnabled: false,
+    notificationsEnabled: true,
     notificationsTime: 'morning',
     currentView: 'feed', // 'feed' | 'deadlines'
     activeCategory: 'All', // 'All' | 'Academic' | 'Events' | 'Deadlines' | 'Admin'
@@ -21,6 +21,18 @@ let appState = {
         upcoming: '#e65100', // < 7 days
         later: '#2e7d32'     // > 7 days
     },
+    // DUAL NOTIFICATION SYSTEM
+    notificationSettings: {
+        instantAlertsEnabled: true,
+        instantAlertsScope: 'high_only', // 'high_only' | 'all'
+        dailyDigestEnabled: true,
+        dailyDigestTime: 'morning', // 'morning' | 'afternoon' | 'evening'
+        categories: ['Academic', 'Events', 'Deadlines', 'Admin']
+    },
+    notificationLogs: [], // Audit log: [{ id, timestamp, type, noticeId, title, user, details }]
+    alertedNoticeIds: [], // Tracked IDs to prevent duplicate instant alerts
+    digestedNoticeIds: [], // Tracked IDs to prevent duplicate digest inclusions
+    lastDigestCheckDate: null,
     notices: []
 };
 
@@ -33,6 +45,10 @@ let deferredPrompt = null;
 // Pull to refresh tracking
 let touchStartY = 0;
 let touchEndY = 0;
+
+// Real-time banner timer & active notice tracking
+let currentBannerNoticeId = null;
+let bannerTimer = null;
 
 // ===== SAMPLE DATA =====
 function getSampleNotices() {
@@ -234,6 +250,7 @@ function init() {
     setupPullToRefresh();
     setupRouting();
     setupOutsideClicks();
+    checkScheduledDailyDigest();
 
     // Check login state
     if (appState.user) {
@@ -262,11 +279,18 @@ function loadState() {
                 deadlineColors: {
                     ...appState.deadlineColors,
                     ...(parsed.deadlineColors || {})
+                },
+                notificationSettings: {
+                    ...appState.notificationSettings,
+                    ...(parsed.notificationSettings || {})
                 }
             };
         }
         appState.savedNotices = JSON.parse(localStorage.getItem('savedNotices') || '[]');
         appState.archivedNotices = JSON.parse(localStorage.getItem('archivedNotices') || '[]');
+        appState.notificationLogs = JSON.parse(localStorage.getItem('notificationLogs') || '[]');
+        appState.alertedNoticeIds = JSON.parse(localStorage.getItem('alertedNoticeIds') || '[]');
+        appState.digestedNoticeIds = JSON.parse(localStorage.getItem('digestedNoticeIds') || '[]');
     } catch (e) {
         console.error('Failed to parse state:', e);
     }
@@ -278,12 +302,17 @@ function saveState() {
             user: appState.user,
             isAdmin: appState.isAdmin,
             notificationsEnabled: appState.notificationsEnabled,
-            notificationsTime: appState.notificationsTime,
+            notificationsTime: appState.notificationSettings ? appState.notificationSettings.dailyDigestTime : 'morning',
             currentView: appState.currentView,
-            deadlineColors: appState.deadlineColors
+            deadlineColors: appState.deadlineColors,
+            notificationSettings: appState.notificationSettings,
+            lastDigestCheckDate: appState.lastDigestCheckDate
         }));
         localStorage.setItem('savedNotices', JSON.stringify(appState.savedNotices));
         localStorage.setItem('archivedNotices', JSON.stringify(appState.archivedNotices));
+        localStorage.setItem('notificationLogs', JSON.stringify(appState.notificationLogs || []));
+        localStorage.setItem('alertedNoticeIds', JSON.stringify(appState.alertedNoticeIds || []));
+        localStorage.setItem('digestedNoticeIds', JSON.stringify(appState.digestedNoticeIds || []));
     } catch (e) {
         console.error('Failed to save state:', e);
     }
@@ -1770,7 +1799,7 @@ function submitNotice() {
         currentAdminAttachment = null;
 
         showToast('Notice published successfully');
-        sendNotification(title);
+        evaluateNoticeForInstantAlert(newNotice);
         goHome();
     }
 }
@@ -1786,7 +1815,10 @@ function deleteNotice(id) {
 
     if (confirm(`Are you sure you want to delete ${title}?`)) {
         appState.notices = appState.notices.filter(n => n.id !== Number(id));
+        appState.alertedNoticeIds = (appState.alertedNoticeIds || []).filter(item => item !== Number(id));
+        appState.digestedNoticeIds = (appState.digestedNoticeIds || []).filter(item => item !== Number(id));
         saveNotices();
+        saveState();
         showToast('Notice deleted successfully');
         goHome();
     }
@@ -1795,10 +1827,7 @@ function deleteNotice(id) {
 // ===== SETTINGS & TABS =====
 function openSettings() {
     switchSettingsTab(appState.activeSettingsTab || 'notifications');
-    const notifToggle = document.getElementById('notifToggleInput');
-    if (notifToggle) notifToggle.checked = appState.notificationsEnabled;
-    const notifSelect = document.getElementById('notifTime');
-    if (notifSelect) notifSelect.value = appState.notificationsTime || 'morning';
+    loadNotificationSettings();
     applyUrgencyColors();
     showScreen('settingsScreen');
 }
@@ -1838,31 +1867,527 @@ function switchSettingsTab(tabName) {
             else panels[k].style.display = 'none';
         }
     });
-}
 
-function handleNotifToggleChange(isChecked) {
-    appState.notificationsEnabled = isChecked;
-    saveState();
-
-    if (isChecked && 'Notification' in window) {
-        Notification.requestPermission().then(permission => {
-            if (permission === 'granted') {
-                showToast('Push notifications enabled');
-            } else {
-                showToast('Notification permission denied by browser');
-            }
-        });
-    } else {
-        showToast(isChecked ? 'Notifications enabled' : 'Notifications disabled');
+    if (tabName === 'notifications') {
+        renderNotificationHistory();
     }
 }
 
-function updateNotifTime() {
-    const select = document.getElementById('notifTime');
-    if (!select) return;
-    appState.notificationsTime = select.value;
+// ===== DUAL NOTIFICATION SYSTEM =====
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function isNoticeUnder48Hours(notice) {
+    if (!notice || !notice.deadline) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const deadlineDate = new Date(notice.deadline);
+    deadlineDate.setHours(23, 59, 59, 999);
+    const diffMs = deadlineDate.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    return diffDays >= 0 && diffDays <= 2;
+}
+
+// 1. Real-time In-App Banner Alerts
+function showAlertBanner(notice, reason, isUrgent = false) {
+    const banner = document.getElementById('alertBanner');
+    const titleEl = document.getElementById('alertBannerTitle');
+    const descEl = document.getElementById('alertBannerDesc');
+    const typeEl = document.getElementById('alertBannerType');
+    if (!banner || !titleEl) return;
+
+    if (bannerTimer) {
+        clearTimeout(bannerTimer);
+        bannerTimer = null;
+    }
+
+    currentBannerNoticeId = notice ? notice.id : null;
+    titleEl.textContent = notice ? notice.title : 'New Notice Announcement';
+    if (descEl) descEl.textContent = reason || (isUrgent ? 'Action required within 48 hours' : 'New notice posted');
+
+    if (isUrgent) {
+        banner.classList.add('urgent');
+        if (typeEl) typeEl.textContent = 'URGENT ALERT';
+    } else {
+        banner.classList.remove('urgent');
+        if (typeEl) typeEl.textContent = 'INSTANT ALERT';
+    }
+
+    banner.classList.remove('hidden');
+
+    bannerTimer = setTimeout(() => {
+        dismissAlertBanner();
+    }, 10000);
+}
+
+function dismissAlertBanner() {
+    const banner = document.getElementById('alertBanner');
+    if (banner) banner.classList.add('hidden');
+    if (bannerTimer) {
+        clearTimeout(bannerTimer);
+        bannerTimer = null;
+    }
+    currentBannerNoticeId = null;
+}
+
+function viewAlertBannerNotice() {
+    const targetId = currentBannerNoticeId;
+    dismissAlertBanner();
+    if (targetId) {
+        viewNotice(targetId);
+    }
+}
+
+// 2. Real-time Evaluation on Notice Post
+function evaluateNoticeForInstantAlert(notice) {
+    if (!notice) return false;
+
+    const settings = appState.notificationSettings || {
+        instantAlertsEnabled: true,
+        instantAlertsScope: 'high_only',
+        dailyDigestEnabled: true,
+        dailyDigestTime: 'morning',
+        categories: ['Academic', 'Events', 'Deadlines', 'Admin']
+    };
+
+    if (!settings.instantAlertsEnabled) {
+        return false;
+    }
+
+    // Category filter check
+    const subscribedCats = settings.categories || ['Academic', 'Events', 'Deadlines', 'Admin'];
+    if (notice.category && !subscribedCats.includes(notice.category)) {
+        return false;
+    }
+
+    // Strict duplicate prevention: notice only triggers once
+    if (!appState.alertedNoticeIds) appState.alertedNoticeIds = [];
+    if (appState.alertedNoticeIds.includes(notice.id)) {
+        return false;
+    }
+
+    const under48h = isNoticeUnder48Hours(notice);
+    const isHighPriority = notice.priority === 'high';
+
+    let qualifies = false;
+    let reason = '';
+    let isUrgent = false;
+
+    if (settings.instantAlertsScope === 'all') {
+        qualifies = true;
+        if (under48h) {
+            reason = 'Urgent: Deadline < 48 hours';
+            isUrgent = true;
+        } else if (isHighPriority) {
+            reason = 'HIGH Priority Announcement';
+            isUrgent = true;
+        } else {
+            reason = `${notice.category || 'General'} Announcement`;
+        }
+    } else {
+        // 'high_only': HIGH priority notice OR deadline < 48 hours
+        if (under48h) {
+            qualifies = true;
+            isUrgent = true;
+            reason = 'Urgent: Deadline due within 48 hours';
+        } else if (isHighPriority) {
+            qualifies = true;
+            isUrgent = true;
+            reason = 'HIGH Priority Notice';
+        }
+    }
+
+    if (qualifies) {
+        appState.alertedNoticeIds.push(notice.id);
+        logNotification('instant', notice.id, notice.title, reason);
+
+        showAlertBanner(notice, reason, isUrgent);
+
+        if ('Notification' in window && Notification.permission === 'granted') {
+            try {
+                new Notification(isUrgent ? 'Urgent College Alert' : 'New College Notice', {
+                    body: notice.title + (reason ? ` (${reason})` : ''),
+                    icon: 'icon-192.png'
+                });
+            } catch (err) {
+                console.warn('Browser notification error:', err);
+            }
+        }
+        return true;
+    }
+
+    return false;
+}
+
+// 3. Daily Digest (Scheduled 24h Summary)
+function triggerDailyDigestNow(isManual = false) {
+    const settings = appState.notificationSettings || {
+        dailyDigestEnabled: true,
+        dailyDigestTime: 'morning',
+        categories: ['Academic', 'Events', 'Deadlines', 'Admin']
+    };
+
+    if (!isManual && !settings.dailyDigestEnabled) {
+        return;
+    }
+
+    const subscribedCats = settings.categories || ['Academic', 'Events', 'Deadlines', 'Admin'];
+    const nowTime = new Date().getTime();
+
+    // Query MEDIUM + LOW priority notices from past 24-36h that haven't been digested
+    let eligibleNotices = appState.notices.filter(notice => {
+        if (notice.priority !== 'medium' && notice.priority !== 'low') return false;
+        if (notice.category && !subscribedCats.includes(notice.category)) return false;
+        if (appState.archivedNotices && appState.archivedNotices.includes(notice.id)) return false;
+        if (appState.digestedNoticeIds && appState.digestedNoticeIds.includes(notice.id)) return false;
+
+        if (!notice.date) return false;
+        const postTime = new Date(notice.date).getTime();
+        const diffHours = (nowTime - postTime) / (1000 * 60 * 60);
+        return diffHours >= -12 && diffHours <= 36;
+    });
+
+    // In manual test mode, if no notices within 24h, allow undigested medium/low notices to show batching
+    if (isManual && eligibleNotices.length === 0) {
+        eligibleNotices = appState.notices.filter(notice => {
+            if (notice.priority !== 'medium' && notice.priority !== 'low') return false;
+            if (notice.category && !subscribedCats.includes(notice.category)) return false;
+            if (appState.archivedNotices && appState.archivedNotices.includes(notice.id)) return false;
+            if (appState.digestedNoticeIds && appState.digestedNoticeIds.includes(notice.id)) return false;
+            return true;
+        });
+    }
+
+    if (eligibleNotices.length === 0) {
+        if (isManual) {
+            showToast('All medium & low priority notices have already been digested');
+        }
+        return;
+    }
+
+    // Mark as digested to prevent duplicate digest alerts
+    if (!appState.digestedNoticeIds) appState.digestedNoticeIds = [];
+    eligibleNotices.forEach(n => {
+        if (!appState.digestedNoticeIds.includes(n.id)) {
+            appState.digestedNoticeIds.push(n.id);
+        }
+    });
+
+    const count = eligibleNotices.length;
+    const summaryText = `You have ${count} new ${count === 1 ? 'notice' : 'notices'} from today`;
+
+    logNotification('digest', null, `Daily Digest (${count} notices)`, summaryText);
+
+    // Render digest modal
+    const modal = document.getElementById('digestModal');
+    const summaryEl = document.getElementById('digestModalSummaryText');
+    const listEl = document.getElementById('digestModalList');
+
+    if (summaryEl) summaryEl.textContent = summaryText;
+
+    if (listEl) {
+        listEl.innerHTML = '';
+        eligibleNotices.forEach(notice => {
+            const item = document.createElement('div');
+            item.className = 'digest-item-card';
+
+            const prio = (notice.priority || 'medium').toLowerCase();
+            const dateStr = notice.date ? new Date(notice.date).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+
+            item.innerHTML = `
+                <div class="digest-item-info">
+                    <span class="digest-item-title">${escapeHtml(notice.title)}</span>
+                    <span class="digest-item-meta">${escapeHtml(notice.category || 'General')} • ${prio.toUpperCase()} • ${dateStr}</span>
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="openNoticeFromDigest(${notice.id})">
+                    View
+                </button>
+            `;
+            listEl.appendChild(item);
+        });
+    }
+
+    if (modal) {
+        modal.style.display = 'flex';
+    }
+
+    if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+            new Notification('Daily Notice Digest', {
+                body: summaryText,
+                icon: 'icon-192.png'
+            });
+        } catch (err) {
+            console.warn('Browser notification error:', err);
+        }
+    }
+
+    if (isManual) {
+        showToast(`Delivered daily digest: ${count} notices`);
+    }
+}
+
+function closeDigestModal(event) {
+    if (event && event.target !== event.currentTarget) return;
+    const modal = document.getElementById('digestModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function openNoticeFromDigest(id) {
+    closeDigestModal();
+    viewNotice(id);
+}
+
+// 4. Test Instant Alert Simulation
+function triggerTestInstantAlert() {
+    const highNotice = appState.notices.find(n => n.priority === 'high') || appState.notices[0] || {
+        id: 9999,
+        title: 'Urgent: Semester Examination Schedule Update',
+        priority: 'high',
+        category: 'Academic',
+        deadline: new Date(Date.now() + 86400000).toISOString().split('T')[0]
+    };
+
+    const isUrgent = isNoticeUnder48Hours(highNotice) || highNotice.priority === 'high';
+    const reason = 'Test Alert: High priority communication';
+
+    if (!appState.alertedNoticeIds) appState.alertedNoticeIds = [];
+    if (!appState.alertedNoticeIds.includes(highNotice.id)) {
+        appState.alertedNoticeIds.push(highNotice.id);
+    }
+
+    logNotification('instant', highNotice.id, highNotice.title, reason);
+    showAlertBanner(highNotice, reason, isUrgent);
+    showToast('Simulated real-time instant alert triggered');
+
+    if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+            new Notification('Instant Notice Alert (Test)', {
+                body: highNotice.title,
+                icon: 'icon-192.png'
+            });
+        } catch (err) {
+            console.warn('Browser notification error:', err);
+        }
+    }
+}
+
+// 5. Automatic Scheduled Digest Liveness Check
+function checkScheduledDailyDigest() {
+    const settings = appState.notificationSettings;
+    if (!settings || !settings.dailyDigestEnabled) return;
+
+    const now = new Date();
+    const currentHour = now.getHours();
+    const todayDateStr = now.toISOString().split('T')[0];
+
+    const slot = settings.dailyDigestTime || 'morning';
+    let targetHour = 8;
+    if (slot === 'afternoon') targetHour = 13;
+    else if (slot === 'evening') targetHour = 18;
+
+    const slotKey = `${todayDateStr}_${slot}`;
+
+    if (appState.lastDigestCheckDate === slotKey) {
+        return;
+    }
+
+    if (currentHour >= targetHour) {
+        appState.lastDigestCheckDate = slotKey;
+        saveState();
+        triggerDailyDigestNow(false);
+    }
+}
+
+// 6. Settings Sync & Persistence
+function updateAlertPreferences() {
+    const instantToggle = document.getElementById('instantAlertsToggle');
+    const instantScope = document.getElementById('instantAlertsScope');
+    const digestToggle = document.getElementById('dailyDigestToggle');
+    const digestTime = document.getElementById('digestTimeSelect');
+    const catAcademic = document.getElementById('catFilterAcademic');
+    const catEvents = document.getElementById('catFilterEvents');
+    const catDeadlines = document.getElementById('catFilterDeadlines');
+    const catAdmin = document.getElementById('catFilterAdmin');
+
+    const selectedCategories = [];
+    if (catAcademic && catAcademic.checked) selectedCategories.push('Academic');
+    if (catEvents && catEvents.checked) selectedCategories.push('Events');
+    if (catDeadlines && catDeadlines.checked) selectedCategories.push('Deadlines');
+    if (catAdmin && catAdmin.checked) selectedCategories.push('Admin');
+
+    const instantEnabled = instantToggle ? instantToggle.checked : true;
+    const digestEnabled = digestToggle ? digestToggle.checked : true;
+
+    appState.notificationSettings = {
+        instantAlertsEnabled: instantEnabled,
+        instantAlertsScope: instantScope ? instantScope.value : 'high_only',
+        dailyDigestEnabled: digestEnabled,
+        dailyDigestTime: digestTime ? digestTime.value : 'morning',
+        categories: selectedCategories
+    };
+
+    appState.notificationsEnabled = instantEnabled || digestEnabled;
+    appState.notificationsTime = appState.notificationSettings.dailyDigestTime;
+
+    const instantSubgroup = document.getElementById('instantAlertsSubgroup');
+    if (instantSubgroup) {
+        instantSubgroup.style.opacity = instantEnabled ? '1' : '0.4';
+        instantSubgroup.style.pointerEvents = instantEnabled ? 'auto' : 'none';
+    }
+    const digestSubgroup = document.getElementById('dailyDigestSubgroup');
+    if (digestSubgroup) {
+        digestSubgroup.style.opacity = digestEnabled ? '1' : '0.4';
+        digestSubgroup.style.pointerEvents = digestEnabled ? 'auto' : 'none';
+    }
+
     saveState();
-    showToast(`Digest set to ${select.options[select.selectedIndex].text}`);
+
+    if (instantEnabled && 'Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+    }
+}
+
+function loadNotificationSettings() {
+    const s = appState.notificationSettings || {
+        instantAlertsEnabled: true,
+        instantAlertsScope: 'high_only',
+        dailyDigestEnabled: true,
+        dailyDigestTime: 'morning',
+        categories: ['Academic', 'Events', 'Deadlines', 'Admin']
+    };
+
+    const instantToggle = document.getElementById('instantAlertsToggle');
+    if (instantToggle) instantToggle.checked = !!s.instantAlertsEnabled;
+
+    const instantScope = document.getElementById('instantAlertsScope');
+    if (instantScope) instantScope.value = s.instantAlertsScope || 'high_only';
+
+    const digestToggle = document.getElementById('dailyDigestToggle');
+    if (digestToggle) digestToggle.checked = !!s.dailyDigestEnabled;
+
+    const digestTime = document.getElementById('digestTimeSelect');
+    if (digestTime) digestTime.value = s.dailyDigestTime || 'morning';
+
+    const cats = s.categories || ['Academic', 'Events', 'Deadlines', 'Admin'];
+    const catAcademic = document.getElementById('catFilterAcademic');
+    if (catAcademic) catAcademic.checked = cats.includes('Academic');
+    const catEvents = document.getElementById('catFilterEvents');
+    if (catEvents) catEvents.checked = cats.includes('Events');
+    const catDeadlines = document.getElementById('catFilterDeadlines');
+    if (catDeadlines) catDeadlines.checked = cats.includes('Deadlines');
+    const catAdmin = document.getElementById('catFilterAdmin');
+    if (catAdmin) catAdmin.checked = cats.includes('Admin');
+
+    const instantSubgroup = document.getElementById('instantAlertsSubgroup');
+    if (instantSubgroup) {
+        instantSubgroup.style.opacity = s.instantAlertsEnabled ? '1' : '0.4';
+        instantSubgroup.style.pointerEvents = s.instantAlertsEnabled ? 'auto' : 'none';
+    }
+    const digestSubgroup = document.getElementById('dailyDigestSubgroup');
+    if (digestSubgroup) {
+        digestSubgroup.style.opacity = s.dailyDigestEnabled ? '1' : '0.4';
+        digestSubgroup.style.pointerEvents = s.dailyDigestEnabled ? 'auto' : 'none';
+    }
+
+    renderNotificationHistory();
+}
+
+// 7. Notification Storage & Audit Logging
+function logNotification(type, noticeId, noticeTitle, details = '') {
+    if (!appState.notificationLogs) appState.notificationLogs = [];
+
+    const currentUser = appState.user ? appState.user.username : 'All Users';
+    const newLog = {
+        id: Date.now() + Math.random().toString(36).substring(2, 6),
+        timestamp: new Date().toISOString(),
+        type: type, // 'instant' | 'digest'
+        noticeId: noticeId || null,
+        title: noticeTitle,
+        user: currentUser,
+        details: details
+    };
+
+    appState.notificationLogs.unshift(newLog);
+    if (appState.notificationLogs.length > 100) {
+        appState.notificationLogs = appState.notificationLogs.slice(0, 100);
+    }
+    saveState();
+    renderNotificationHistory();
+}
+
+function renderNotificationHistory() {
+    const listEl = document.getElementById('notificationHistoryList');
+    const statTotal = document.getElementById('logStatTotal');
+    const statAlerted = document.getElementById('logStatAlerted');
+    const statDigested = document.getElementById('logStatDigested');
+
+    const logs = appState.notificationLogs || [];
+    const alerted = appState.alertedNoticeIds || [];
+    const digested = appState.digestedNoticeIds || [];
+
+    if (statTotal) statTotal.textContent = `Total Sent: ${logs.length}`;
+    if (statAlerted) statAlerted.textContent = `Alerted IDs: ${alerted.length}`;
+    if (statDigested) statDigested.textContent = `Digested IDs: ${digested.length}`;
+
+    if (!listEl) return;
+    listEl.innerHTML = '';
+
+    if (logs.length === 0) {
+        listEl.innerHTML = '<div style="font-size: 12px; color: var(--text-muted); padding: 12px 0; text-align: center;">No notifications logged yet</div>';
+        return;
+    }
+
+    logs.forEach(log => {
+        const item = document.createElement('div');
+        item.className = 'log-entry-row';
+
+        const date = new Date(log.timestamp);
+        const timeFormatted = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' ' + date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+
+        const typeClass = log.type === 'instant' ? 'instant' : 'digest';
+        const typeLabel = log.type === 'instant' ? 'INSTANT' : 'DIGEST';
+
+        item.innerHTML = `
+            <div class="log-entry-left">
+                <span class="log-type-tag ${typeClass}">${typeLabel}</span>
+                <span class="log-entry-title" title="${escapeHtml(log.title)}">${escapeHtml(log.title)}</span>
+            </div>
+            <span class="log-entry-time">${timeFormatted}</span>
+        `;
+        listEl.appendChild(item);
+    });
+}
+
+function clearNotificationLogs() {
+    if (confirm('Clear notification audit logs and alert history? (This resets duplicate tracking)')) {
+        appState.notificationLogs = [];
+        appState.alertedNoticeIds = [];
+        appState.digestedNoticeIds = [];
+        saveState();
+        renderNotificationHistory();
+        showToast('Notification logs cleared');
+    }
+}
+
+// Backward-compatible wrappers
+function handleNotifToggleChange(isChecked) {
+    if (appState.notificationSettings) {
+        appState.notificationSettings.instantAlertsEnabled = isChecked;
+    }
+    updateAlertPreferences();
+}
+
+function updateNotifTime() {
+    updateAlertPreferences();
 }
 
 function sendNotification(title) {

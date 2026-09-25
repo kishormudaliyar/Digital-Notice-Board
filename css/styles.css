@@ -2029,3 +2029,302 @@ html, body {
     flex-shrink: 0;
     margin-top: 1px;
 }
+
+/* ==========================================================================
+   REAL-TIME IN-APP NOTIFICATION BANNER
+   ========================================================================== */
+.alert-banner {
+    position: fixed;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% - 32px);
+    max-width: 600px;
+    background: #ffffff;
+    border: 1px solid var(--border-light);
+    border-left: 4px solid var(--accent);
+    border-radius: var(--radius-md);
+    box-shadow: 0 10px 25px rgba(15, 23, 42, 0.18), 0 4px 6px rgba(15, 23, 42, 0.05);
+    z-index: 1200;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    animation: bannerSlideDown 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.alert-banner.urgent {
+    border-left-color: var(--priority-high);
+}
+
+.alert-banner.urgent .alert-banner-badge {
+    background: var(--priority-high-bg);
+    color: var(--priority-high-text);
+}
+
+@keyframes bannerSlideDown {
+    from {
+        transform: translate(-50%, -24px);
+        opacity: 0;
+    }
+    to {
+        transform: translate(-50%, 0);
+        opacity: 1;
+    }
+}
+
+.alert-banner-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 8px;
+    border-radius: var(--radius-pill);
+    background: var(--accent-subtle);
+    color: var(--accent-hover);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    flex-shrink: 0;
+}
+
+.alert-banner-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.alert-banner-title {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.alert-banner-desc {
+    font-size: 11.5px;
+    color: var(--text-muted);
+}
+
+.alert-banner-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.btn-banner-action {
+    padding: 5px 12px;
+    border-radius: var(--radius-sm);
+    background: var(--primary);
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.btn-banner-action:hover {
+    background: var(--primary-light);
+}
+
+.btn-banner-dismiss {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+}
+
+.btn-banner-dismiss:hover {
+    background: #e2e8f0;
+    color: var(--text-primary);
+}
+
+/* ==========================================================================
+   ENHANCED ALERT PREFERENCES & NOTIFICATION AUDIT LOG
+   ========================================================================== */
+.settings-sub-group {
+    padding: 8px 0 12px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.input-label-sm {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.category-checkbox-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 10px;
+    margin-top: 6px;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-primary);
+    cursor: pointer;
+    user-select: none;
+}
+
+.checkbox-label input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+.settings-actions-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+}
+
+.notification-log-stats {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    background: #f8fafc;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    margin-bottom: 14px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.log-stat-item {
+    font-weight: 600;
+}
+
+.notification-log-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 240px;
+    overflow-y: auto;
+}
+
+.log-entry-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 10px;
+    background: #ffffff;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+}
+
+.log-entry-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.log-type-tag {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.log-type-tag.instant {
+    background: var(--priority-high-bg);
+    color: var(--priority-high-text);
+}
+
+.log-type-tag.digest {
+    background: var(--accent-subtle);
+    color: var(--accent-hover);
+}
+
+.log-entry-title {
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 280px;
+}
+
+.log-entry-time {
+    font-size: 11px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+/* ==========================================================================
+   DAILY DIGEST MODAL
+   ========================================================================== */
+.digest-modal-summary {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border-light);
+    margin-bottom: 12px;
+}
+
+.digest-items-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.digest-item-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    background: #f8fafc;
+    gap: 10px;
+}
+
+.digest-item-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.digest-item-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.digest-item-meta {
+    font-size: 11.5px;
+    color: var(--text-muted);
+}
+
