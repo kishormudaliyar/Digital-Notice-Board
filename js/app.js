@@ -52,89 +52,10 @@ let touchEndY = 0;
 let currentBannerNoticeId = null;
 let bannerTimer = null;
 
-// ===== SAMPLE DATA =====
+// ===== NOTICE DATA SOURCE =====
 function getSampleNotices() {
-    const today = new Date();
-    const formatDate = (daysAhead) => {
-        const d = new Date(today);
-        d.setDate(d.getDate() + daysAhead);
-        return d.toISOString().split('T')[0];
-    };
-
-    return [
-        {
-            id: 1,
-            title: 'Exam Hall Ticket Collection & Fee Verification',
-            category: 'Academic',
-            content: 'All candidates appearing for the semester examinations must collect their stamped hall tickets from Room 204. Ensure that any remaining semester dues are verified prior to the clearance deadline.\n\nRequired Verification Items:\n- College Identity Card\n- Fee Payment Acknowledgment Slip\n- Two passport size photographs',
-            date: formatDate(0),
-            deadline: formatDate(1), // < 48 hrs -> URGENT
-            priority: 'high',
-            author: 'Examination Cell',
-            attachment: {
-                name: 'FYCS_Semester_Hall_Ticket_Circular.pdf',
-                type: 'application/pdf',
-                size: 24576,
-                data: 'data:application/pdf;base64,JVBERi0xLjQKMSAwIG9iajw8L1R5cGUvQ2F0YWxvZy9QYWdlcyAyIDAgUj4+ZW5kb2JqCjIgMCBvYmo8PC9UeXBlL1BhZ2VzL0NvdW50IDEvS2lkc1szIDAgUl0+PmVuZG9iagozIDAgb2JqPDwvVHlwZS9QYWdlL01lZGlhQm94WzAgMCA2MTIgNzkyXS9QYXJlbnQgMiAwIFIvUmVzb3VyY2VzPDwvRm9udDw8L0YxIDQgMCBSPj4+Pi9Db250ZW50cyA1IDAgUj4+ZW5kb2JqCjQgMCBvYmo8PC9UeXBlL0ZvbnQvU3VidHlwZS9UeXBlMS9CYXNlRm9udC9IZWx2ZXRpY2E+PmVuZG9iago1IDAgb2JqPDwvTGVuZ3RoIDc3Pj5zdHJlYW0KQlQgL0YxIDE0IFRmIDUwIDcyMCBUZCAoTC5ELiBTb25hd2FuZSBDb2xsZWdlIC0gRllDUyBFeGFtaW5hdGlvbiBDaXJjdWxhciAyMDI2KSBUaiBFVAplbmRzdHJlYW0KZW5kb2JqCnhyZWYKMCA2CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAwOSAwMDAwMCBuIAowMDAwMDAwMDU2IDAwMDAwIG4gCjAwMDAwMDAxMTEgMDAwMDAgbiAKMDAwMDAwMDIxMiAwMDAwMCBuIAowMDAwMDAwMjc5IDAwMDAwIG4gCnRyYWlsZXI8PC9TaXplIDYvUm9vdCAxIDAgUj4+CnN0YXJ0eHJlZgoxMDYKJSVFT0Y='
-            }
-        },
-        {
-            id: 2,
-            title: 'Government Scholarship Application Verification',
-            category: 'Admin',
-            content: 'Eligible reserved category and merit-cum-means scholarship applicants must submit their hard copies of domicile certificates, income declarations, and caste validity documents at Administrative Counter 3.\n\nIncomplete applications will be disqualified by the Social Welfare Department.',
-            date: formatDate(-1),
-            deadline: formatDate(4), // < 7 days -> UPCOMING
-            priority: 'high',
-            author: 'Financial Aid Office'
-        },
-        {
-            id: 3,
-            title: 'Final Year Project Documentation & External Viva',
-            category: 'Academic',
-            content: 'Submission of the project synopsis, GitHub repository links, and IEEE formatted project reports for the semester external examination.\n\nViva Voce will be conducted in Computer Science Laboratories 1 and 2 by University appointed examiners.',
-            date: formatDate(-2),
-            deadline: formatDate(14), // > 7 days -> LATER
-            priority: 'medium',
-            author: 'Computer Science Dept',
-            attachment: {
-                name: 'FYCS_Project_Viva_Schedule_Timetable.png',
-                type: 'image/svg+xml',
-                size: 18432,
-                data: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="340" viewBox="0 0 600 340"><rect width="100%" height="100%" fill="%23f8fafc"/><rect x="20" y="20" width="560" height="50" rx="6" fill="%231a3a52"/><text x="300" y="52" fill="white" font-family="sans-serif" font-size="16" font-weight="bold" text-anchor="middle">FYCS Project Viva Schedule 2026</text><rect x="20" y="85" width="560" height="235" rx="6" fill="white" stroke="%23e2e8f0"/><text x="40" y="125" fill="%230f172a" font-family="sans-serif" font-size="13" font-weight="bold">Batch 1 (Roll 101 - 130): 09:30 AM - Lab 1</text><text x="40" y="165" fill="%230f172a" font-family="sans-serif" font-size="13" font-weight="bold">Batch 2 (Roll 131 - 160): 11:30 AM - Lab 1</text><text x="40" y="205" fill="%230f172a" font-family="sans-serif" font-size="13" font-weight="bold">Batch 3 (Roll 161 - 190): 01:30 PM - Lab 2</text><text x="40" y="250" fill="%2364748b" font-family="sans-serif" font-size="12">Requirements: Spiral-bound report, GitHub repository link, College ID</text><text x="40" y="290" fill="%2300acc1" font-family="sans-serif" font-size="12" font-weight="bold">University of Mumbai Appointed External Examiners</text></svg>'
-            }
-        },
-        {
-            id: 4,
-            title: 'Annual Tech Symposium: Hack-Sonawane 2026',
-            category: 'Events',
-            content: 'Registrations are now open for the 24-hour inter-collegiate coding hackathon. Themes include AI for Social Good, Urban Transportation, and Cyber Resilience.\n\nCash prizes, mentorship sessions, and industry internships for winning teams.',
-            date: formatDate(-3),
-            deadline: formatDate(6),
-            priority: 'medium',
-            author: 'Student Council'
-        },
-        {
-            id: 5,
-            title: 'Central Library Overdue Clearance Drive',
-            category: 'Admin',
-            content: 'Return overdue books without fine penalty during the ongoing clearance week before semester examination hall ticket distribution.',
-            date: formatDate(-5),
-            deadline: formatDate(-1), // Past -> EXPIRED
-            priority: 'low',
-            author: 'Central Library'
-        },
-        {
-            id: 6,
-            title: 'Campus IT Network Maintenance & Wi-Fi Upgrades',
-            category: 'Admin',
-            content: 'The campus IT department will be upgrading core switches and campus Wi-Fi access points this Saturday between 11:00 AM and 03:00 PM. Periodic downtime may occur.',
-            date: formatDate(-4),
-            deadline: null,
-            priority: 'low',
-            author: 'IT Operations'
-        }
-    ];
+    // No hardcoded demo announcements; clean board driven strictly by real user notices
+    return [];
 }
 
 // ===== SVG ICONS HELPERS (Zero Emojis) =====
@@ -254,6 +175,27 @@ function init() {
     setupOutsideClicks();
     initFirebase();
 
+    // Auto-clear legacy demo notices once
+    if (localStorage.getItem('demoNoticesPurged_v3') !== 'true') {
+        const dummyNoticeTitles = [
+            'Exam Hall Ticket Collection & Fee Verification',
+            'Government Scholarship Application Verification',
+            'Final Year Project Documentation & External Viva',
+            'Annual Tech Symposium: Hack-Sonawane 2026',
+            'Central Library Overdue Clearance Drive',
+            'Campus IT Network Maintenance & Wi-Fi Upgrades',
+            'Library Extended Hours',
+            'Campus Maintenance Work',
+            'hi'
+        ];
+        if (Array.isArray(appState.notices)) {
+            appState.notices = appState.notices.filter(n => !dummyNoticeTitles.includes(n.title));
+            saveNotices();
+            renderNotices();
+        }
+        localStorage.setItem('demoNoticesPurged_v3', 'true');
+    }
+
     // Check login state
     if (appState.user) {
         showScreen('homeScreen', false);
@@ -263,9 +205,6 @@ function init() {
         updateAdminControls();
         switchView(appState.currentView || 'feed');
         checkScheduledDailyDigest();
-        if (appState.isAdmin) {
-            seedFirestoreIfEmpty();
-        }
     } else {
         closeDigestModal();
         dismissAlertBanner();
@@ -333,34 +272,13 @@ function saveState() {
 function loadNotices() {
     try {
         const saved = localStorage.getItem('notices');
-        let notices = saved ? JSON.parse(saved) : getSampleNotices();
-
-        // Ensure category and sample attachments exist
-        if (Array.isArray(notices)) {
-            const samples = getSampleNotices();
-            notices = notices.map(n => {
-                if (!n.category) {
-                    if (n.deadline) n.category = 'Deadlines';
-                    else if (n.priority === 'high') n.category = 'Academic';
-                    else n.category = 'Admin';
-                }
-                const sampleMatch = samples.find(s => s.id === n.id);
-                if (sampleMatch && sampleMatch.attachment && !n.attachment) {
-                    n.attachment = sampleMatch.attachment;
-                }
-                return n;
-            });
-            localStorage.setItem('notices', JSON.stringify(notices));
-        }
-
+        let notices = saved ? JSON.parse(saved) : [];
+        if (!Array.isArray(notices)) notices = [];
         appState.notices = notices;
-        if (!saved) {
-            saveNotices();
-        }
         renderNotices();
     } catch (e) {
         console.error('Failed to load notices:', e);
-        appState.notices = getSampleNotices();
+        appState.notices = [];
         renderNotices();
     }
 }
@@ -635,9 +553,6 @@ async function handleRegister() {
             showScreen('homeScreen', true);
             switchView(appState.currentView || 'feed');
             checkScheduledDailyDigest();
-            if (isAdmin) {
-                seedFirestoreIfEmpty();
-            }
             showToast(`Welcome ${name}! Registered as ${isAdmin ? 'Faculty / Staff' : 'Student'}`);
             return;
         } catch (error) {
@@ -680,9 +595,6 @@ async function handleRegister() {
     showScreen('homeScreen', true);
     switchView(appState.currentView || 'feed');
     checkScheduledDailyDigest();
-    if (isAdmin) {
-        seedFirestoreIfEmpty();
-    }
     showToast(`Account created! Signed in as ${isAdmin ? 'Faculty (Admin)' : 'Student'}`);
 }
 
@@ -694,37 +606,7 @@ async function handleLogin() {
     const password = passwordInput ? passwordInput.value : '';
 
     if (!identifier) {
-        showToast('Please enter an email or username');
-        return;
-    }
-
-    const cleanId = identifier.toLowerCase();
-
-    // Quick Demo Mode shortcuts
-    if (cleanId === 'student') {
-        appState.user = { username: 'Student', email: 'student@college.edu', role: 'student' };
-        appState.isAdmin = false;
-        saveState();
-        updateAdminControls();
-        updateSecurityPasscodeDisplay();
-        showScreen('homeScreen', true);
-        switchView(appState.currentView || 'feed');
-        checkScheduledDailyDigest();
-        showToast('Signed in as Student (Demo)');
-        return;
-    }
-
-    if (cleanId === 'admin') {
-        appState.user = { username: 'Admin', email: 'admin@college.edu', role: 'admin' };
-        appState.isAdmin = true;
-        saveState();
-        updateAdminControls();
-        updateSecurityPasscodeDisplay();
-        showScreen('homeScreen', true);
-        switchView(appState.currentView || 'feed');
-        checkScheduledDailyDigest();
-        seedFirestoreIfEmpty();
-        showToast('Signed in as Faculty Admin (Demo)');
+        showToast('Please enter your email or username');
         return;
     }
 
@@ -732,6 +614,8 @@ async function handleLogin() {
         showToast('Please enter your password');
         return;
     }
+
+    const cleanId = identifier.toLowerCase();
 
     // 1. Firebase Authentication Login
     if (typeof isFirebaseConfigured === 'function' && isFirebaseConfigured() && typeof fbAuth !== 'undefined' && fbAuth) {
@@ -764,9 +648,6 @@ async function handleLogin() {
             showScreen('homeScreen', true);
             switchView(appState.currentView || 'feed');
             checkScheduledDailyDigest();
-            if (isAdmin) {
-                seedFirestoreIfEmpty();
-            }
             showToast(`Welcome back, ${appState.user.username}!`);
             return;
         } catch (error) {
@@ -797,21 +678,23 @@ async function handleLogin() {
         showScreen('homeScreen', true);
         switchView(appState.currentView || 'feed');
         checkScheduledDailyDigest();
-        if (isAdmin) {
-            seedFirestoreIfEmpty();
-        }
         showToast(`Signed in as ${appState.user.username}`);
         return;
     }
 
-    showToast('Invalid credentials. Use demo "student" / "admin" or register an account.');
+    showToast('Invalid credentials. Please verify your email and password or register.');
 }
 
 function login() {
     handleLogin();
 }
 
-function logout() {
+function logout(skipConfirm = false) {
+    if (!skipConfirm) {
+        const confirmed = confirm('Are you sure you want to sign out of the Notice Board?');
+        if (!confirmed) return;
+    }
+
     closeDigestModal();
     dismissAlertBanner();
 
@@ -828,7 +711,7 @@ function logout() {
 
     const loginEmailInput = document.getElementById('loginEmailInput');
     const loginPasswordInput = document.getElementById('loginPasswordInput');
-    if (loginEmailInput) loginEmailInput.value = 'student';
+    if (loginEmailInput) loginEmailInput.value = '';
     if (loginPasswordInput) loginPasswordInput.value = '';
 
     switchAuthTab('login');
@@ -898,32 +781,19 @@ async function updateFacultyPasscode() {
     showToast(`Faculty passcode successfully updated to "${newCode}"`);
 }
 
-// ===== FIREBASE FIRESTORE SEEDING & SYNC =====
-async function seedFirestoreIfEmpty() {
-    if (!appState.isAdmin || typeof isFirebaseConfigured !== 'function' || !isFirebaseConfigured() || typeof fbDb === 'undefined' || !fbDb) return;
-    try {
-        const snap = await fbDb.collection('notices').limit(1).get();
-        if (snap.empty) {
-            console.log('[Firebase] Cloud Firestore is empty. Seeding official sample notices...');
-            const sample = getSampleNotices();
-            for (const n of sample) {
-                await fbDb.collection('notices').doc(String(n.id)).set(n);
-            }
-            console.log('[Firebase] Successfully seeded sample notices to Cloud Firestore.');
-        }
-    } catch (err) {
-        console.warn('[Firebase Seed Notice Warning]', err.message);
-    }
-}
-
 function resetDemoNoticeData() {
     localStorage.removeItem('notices');
     localStorage.removeItem('digestedNoticeIds');
     localStorage.removeItem('alertedNoticeIds');
+    appState.notices = [];
     appState.digestedNoticeIds = [];
     appState.alertedNoticeIds = [];
-    loadNotices();
-    showToast('Reset local notices to official sample data');
+    saveNotices();
+    renderNotices();
+    if (appState.currentView === 'deadlines') {
+        renderDeadlines();
+    }
+    showToast('Notice board local cache cleared');
 }
 
 // ===== FIREBASE REAL-TIME SUBSCRIPTION & SYNC =====
