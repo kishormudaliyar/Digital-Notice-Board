@@ -1,0 +1,15 @@
+# Operating System Files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# Temporary Office Lock Files
+~$*.docx
+~$*.pptx
+~$*.xlsx
+
+# Local environment & scratch
+*.local
+.cache/
