@@ -5,6 +5,7 @@ let appState = {
     notificationsEnabled: false,
     notificationsTime: 'morning',
     currentView: 'feed', // 'feed' | 'deadlines'
+    activeReminderNoticeId: null,
     deadlineColors: {
         urgent: '#c62828',  // < 48 hours (Red)
         upcoming: '#e65100', // < 7 days (Orange)
@@ -13,7 +14,7 @@ let appState = {
     notices: []
 };
 
-// ===== SAMPLE DATA (with dynamic current dates covering all urgency tiers) =====
+// ===== SAMPLE DATA (with dynamic current dates covering all urgency tiers & attachments) =====
 function getSampleNotices() {
     const today = new Date();
     const formatDate = (daysAhead) => {
@@ -30,7 +31,13 @@ function getSampleNotices() {
             date: formatDate(0),
             deadline: formatDate(1), // < 48 hrs -> URGENT
             priority: 'high',
-            author: 'Examination Cell'
+            author: 'Examination Cell',
+            attachment: {
+                name: 'FYCS_Semester_Hall_Ticket_Circular.pdf',
+                type: 'application/pdf',
+                size: 24576,
+                data: 'data:application/pdf;base64,JVBERi0xLjQKMSAwIG9iajw8L1R5cGUvQ2F0YWxvZy9QYWdlcyAyIDAgUj4+ZW5kb2JqCjIgMCBvYmo8PC9UeXBlL1BhZ2VzL0NvdW50IDEvS2lkc1szIDAgUl0+PmVuZG9iagozIDAgb2JqPDwvVHlwZS9QYWdlL01lZGlhQm94WzAgMCA2MTIgNzkyXS9QYXJlbnQgMiAwIFIvUmVzb3VyY2VzPDwvRm9udDw8L0YxIDQgMCBSPj4+Pi9Db250ZW50cyA1IDAgUj4+ZW5kb2JqCjQgMCBvYmo8PC9UeXBlL0ZvbnQvU3VidHlwZS9UeXBlMS9CYXNlRm9udC9IZWx2ZXRpY2E+PmVuZG9iago1IDAgb2JqPDwvTGVuZ3RoIDc3Pj5zdHJlYW0KQlQgL0YxIDE0IFRmIDUwIDcyMCBUZCAoTC5ELiBTb25hd2FuZSBDb2xsZWdlIC0gRllDUyBFeGFtaW5hdGlvbiBDaXJjdWxhciAyMDI2KSBUaiBFVAplbmRzdHJlYW0KZW5kb2JqCnhyZWYKMCA2CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAwOSAwMDAwMCBuIAowMDAwMDAwMDU2IDAwMDAwIG4gCjAwMDAwMDAxMTEgMDAwMDAgbiAKMDAwMDAwMDIxMiAwMDAwMCBuIAowMDAwMDAwMjc5IDAwMDAwIG4gCnRyYWlsZXI8PC9TaXplIDYvUm9vdCAxIDAgUj4+CnN0YXJ0eHJlZgoxMDYKJSVFT0Y='
+            }
         },
         {
             id: 2,
@@ -48,7 +55,13 @@ function getSampleNotices() {
             date: formatDate(-2),
             deadline: formatDate(14), // > 7 days -> LATER
             priority: 'medium',
-            author: 'Computer Science Dept'
+            author: 'Computer Science Dept',
+            attachment: {
+                name: 'FYCS_Project_Viva_Schedule_Timetable.png',
+                type: 'image/svg+xml',
+                size: 18432,
+                data: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="340" viewBox="0 0 600 340"><rect width="100%" height="100%" fill="%23f8f9fa"/><rect x="20" y="20" width="560" height="50" rx="8" fill="%23003D82"/><text x="300" y="52" fill="white" font-family="sans-serif" font-size="18" font-weight="bold" text-anchor="middle">FYCS Project Viva Schedule 2026</text><rect x="20" y="85" width="560" height="235" rx="8" fill="white" stroke="%23DCDCDC"/><text x="40" y="125" fill="%23333" font-family="sans-serif" font-size="14" font-weight="bold">Batch 1 (Roll 101 - 130): 09:30 AM - Lab 1</text><text x="40" y="165" fill="%23333" font-family="sans-serif" font-size="14" font-weight="bold">Batch 2 (Roll 131 - 160): 11:30 AM - Lab 1</text><text x="40" y="205" fill="%23333" font-family="sans-serif" font-size="14" font-weight="bold">Batch 3 (Roll 161 - 190): 01:30 PM - Lab 2</text><text x="40" y="250" fill="%23666" font-family="sans-serif" font-size="13">Requirements: Printed synopsis, GitHub link, ID card</text><text x="40" y="290" fill="%23e65100" font-family="sans-serif" font-size="13" font-weight="bold">External Examiner: University of Mumbai</text></svg>'
+            }
         },
         {
             id: 4,
@@ -72,6 +85,77 @@ function getSampleNotices() {
 }
 
 // ===== UTILITIES =====
+function formatBytes(bytes, decimals = 1) {
+    if (!bytes || bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}
+
+function dataUrlToBlob(dataUrl) {
+    if (!dataUrl) return new Blob();
+    if (dataUrl.startsWith('data:image/svg+xml;utf8,')) {
+        const svgContent = decodeURIComponent(dataUrl.replace('data:image/svg+xml;utf8,', ''));
+        return new Blob([svgContent], { type: 'image/svg+xml' });
+    }
+    const parts = dataUrl.split(',');
+    const mimeMatch = parts[0].match(/:(.*?);/);
+    const mime = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
+    const bstr = atob(parts[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new Blob([u8arr], { type: mime });
+}
+
+function openAttachmentViewer(attachment) {
+    if (!attachment || !attachment.data) {
+        showToast('No attachment data found');
+        return;
+    }
+    try {
+        const blob = dataUrlToBlob(attachment.data);
+        const blobUrl = URL.createObjectURL(blob);
+        window.open(blobUrl, '_blank');
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+    } catch (e) {
+        console.error('Error opening attachment blob:', e);
+        window.open(attachment.data, '_blank');
+    }
+}
+
+function downloadAttachment(attachment) {
+    if (!attachment || !attachment.data) {
+        showToast('No attachment to download');
+        return;
+    }
+    try {
+        const blob = dataUrlToBlob(attachment.data);
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = attachment.name || 'document';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+        showToast(`Downloading ${attachment.name || 'document'}...`);
+    } catch (e) {
+        console.error('Error downloading attachment:', e);
+        const a = document.createElement('a');
+        a.href = attachment.data;
+        a.download = attachment.name || 'document';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        showToast(`Downloading ${attachment.name || 'document'}...`);
+    }
+}
+
 function escapeHTML(str) {
     if (!str) return '';
     return String(str)
@@ -218,7 +302,23 @@ function saveState() {
 function loadNotices() {
     try {
         const saved = localStorage.getItem('notices');
-        appState.notices = saved ? JSON.parse(saved) : getSampleNotices();
+        let notices = saved ? JSON.parse(saved) : getSampleNotices();
+        if (saved && Array.isArray(notices)) {
+            const samples = getSampleNotices();
+            let updated = false;
+            notices = notices.map(n => {
+                const sampleMatch = samples.find(s => s.id === n.id);
+                if (sampleMatch && sampleMatch.attachment && !n.attachment) {
+                    n.attachment = sampleMatch.attachment;
+                    updated = true;
+                }
+                return n;
+            });
+            if (updated) {
+                localStorage.setItem('notices', JSON.stringify(notices));
+            }
+        }
+        appState.notices = notices;
         if (!saved) {
             saveNotices();
         }
@@ -375,6 +475,61 @@ function switchView(viewName) {
     }
 }
 
+let currentAdminAttachment = null;
+
+function handleAttachmentSelect(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    // Check size limit: 2MB max for localStorage
+    const MAX_SIZE = 2 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+        showToast('File exceeds 2MB limit for local browser storage');
+        event.target.value = '';
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        currentAdminAttachment = {
+            name: file.name,
+            type: file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream'),
+            size: file.size,
+            data: e.target.result
+        };
+        showAdminAttachmentPreview(currentAdminAttachment);
+    };
+    reader.onerror = function() {
+        showToast('Failed to read selected file');
+    };
+    reader.readAsDataURL(file);
+}
+
+function showAdminAttachmentPreview(attachment) {
+    const container = document.getElementById('attachmentPreviewAdmin');
+    const icon = document.getElementById('adminAttachmentIcon');
+    const name = document.getElementById('adminAttachmentName');
+    const size = document.getElementById('adminAttachmentSize');
+
+    if (!container) return;
+
+    const isPdf = attachment.type === 'application/pdf' || (attachment.name && attachment.name.toLowerCase().endsWith('.pdf'));
+    if (icon) icon.textContent = isPdf ? '📄' : '🖼️';
+    if (name) name.textContent = attachment.name || 'Attachment';
+    if (size) size.textContent = `(${formatBytes(attachment.size)})`;
+
+    container.style.display = 'flex';
+}
+
+function removeAdminAttachment() {
+    currentAdminAttachment = null;
+    const fileInput = document.getElementById('noticeAttachment');
+    if (fileInput) fileInput.value = '';
+    const container = document.getElementById('attachmentPreviewAdmin');
+    if (container) container.style.display = 'none';
+    showToast('Attachment removed');
+}
+
 function openAdmin() {
     if (!appState.isAdmin) {
         showToast('Only administrators can post notices');
@@ -393,6 +548,13 @@ function openAdmin() {
     document.getElementById('noticeContent').value = '';
     document.getElementById('noticeDeadline').value = '';
     document.getElementById('noticePriority').value = 'medium';
+
+    currentAdminAttachment = null;
+    const fileInput = document.getElementById('noticeAttachment');
+    if (fileInput) fileInput.value = '';
+    const container = document.getElementById('attachmentPreviewAdmin');
+    if (container) container.style.display = 'none';
+
     showScreen('adminScreen');
 }
 
@@ -424,6 +586,18 @@ function openEditNotice(id) {
     if (contentInput) contentInput.value = notice.content || '';
     if (deadlineInput) deadlineInput.value = notice.deadline || '';
     if (priorityInput) priorityInput.value = notice.priority || 'medium';
+
+    const fileInput = document.getElementById('noticeAttachment');
+    if (fileInput) fileInput.value = '';
+
+    if (notice.attachment) {
+        currentAdminAttachment = { ...notice.attachment };
+        showAdminAttachmentPreview(currentAdminAttachment);
+    } else {
+        currentAdminAttachment = null;
+        const container = document.getElementById('attachmentPreviewAdmin');
+        if (container) container.style.display = 'none';
+    }
 
     showScreen('adminScreen');
 }
@@ -513,6 +687,14 @@ function renderNotices(noticesToRender = appState.notices) {
 
         content.appendChild(title);
         content.appendChild(date);
+
+        if (notice.attachment) {
+            const isPdf = notice.attachment.type === 'application/pdf' || (notice.attachment.name && notice.attachment.name.toLowerCase().endsWith('.pdf'));
+            const attachPill = document.createElement('span');
+            attachPill.className = 'attachment-pill';
+            attachPill.textContent = isPdf ? '📎 PDF Circular' : '📎 Timetable Image';
+            content.appendChild(attachPill);
+        }
 
         const cardRight = document.createElement('div');
         cardRight.className = 'card-right';
@@ -611,6 +793,77 @@ function viewNotice(id) {
         deadlineBox.appendChild(deadlineVal);
 
         container.appendChild(deadlineBox);
+    }
+
+    if (notice.attachment) {
+        const isPdf = notice.attachment.type === 'application/pdf' || (notice.attachment.name && notice.attachment.name.toLowerCase().endsWith('.pdf'));
+        const isImage = (notice.attachment.type && notice.attachment.type.startsWith('image/')) || (notice.attachment.name && /\.(png|jpe?g|svg|webp|gif)$/i.test(notice.attachment.name));
+
+        const attachBox = document.createElement('div');
+        attachBox.className = 'notice-attachment-box';
+
+        const attachHeader = document.createElement('div');
+        attachHeader.className = 'attachment-box-header';
+        attachHeader.textContent = isPdf ? '📄 Official Circular / Circular PDF' : '🖼️ Official Timetable / Attachment';
+        attachBox.appendChild(attachHeader);
+
+        if (isImage) {
+            const imgContainer = document.createElement('div');
+            imgContainer.className = 'attachment-img-preview-container';
+
+            const img = document.createElement('img');
+            img.className = 'attachment-preview-img';
+            img.src = notice.attachment.data;
+            img.alt = notice.attachment.name || 'Notice Attachment';
+            img.title = 'Click to open full view';
+            img.addEventListener('click', () => {
+                openAttachmentViewer(notice.attachment);
+            });
+
+            imgContainer.appendChild(img);
+            attachBox.appendChild(imgContainer);
+        }
+
+        const attachMeta = document.createElement('div');
+        attachMeta.className = 'attachment-card-meta';
+
+        const metaInfo = document.createElement('div');
+        metaInfo.className = 'attachment-meta-info';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'attachment-filename';
+        nameSpan.textContent = notice.attachment.name || (isPdf ? 'Official_Circular.pdf' : 'Timetable.png');
+        metaInfo.appendChild(nameSpan);
+
+        const sizeSpan = document.createElement('span');
+        sizeSpan.className = 'attachment-filesize';
+        sizeSpan.textContent = formatBytes(notice.attachment.size);
+        metaInfo.appendChild(sizeSpan);
+
+        attachMeta.appendChild(metaInfo);
+
+        const attachActions = document.createElement('div');
+        attachActions.className = 'attachment-actions';
+
+        const viewBtn = document.createElement('button');
+        viewBtn.className = 'btn-attachment-view';
+        viewBtn.textContent = isPdf ? '📄 View PDF / Timetable' : '🖼️ View Full Image';
+        viewBtn.addEventListener('click', () => {
+            openAttachmentViewer(notice.attachment);
+        });
+        attachActions.appendChild(viewBtn);
+
+        const downloadBtn = document.createElement('button');
+        downloadBtn.className = 'btn-attachment-download';
+        downloadBtn.textContent = '📥 Download';
+        downloadBtn.addEventListener('click', () => {
+            downloadAttachment(notice.attachment);
+        });
+        attachActions.appendChild(downloadBtn);
+
+        attachMeta.appendChild(attachActions);
+        attachBox.appendChild(attachMeta);
+        container.appendChild(attachBox);
     }
 
     const actions = document.createElement('div');
@@ -850,6 +1103,15 @@ function renderDeadlines(deadlinesToRender = null) {
 
         header.appendChild(badge);
         header.appendChild(dateChip);
+
+        if (item.notice.attachment) {
+            const isPdf = item.notice.attachment.type === 'application/pdf' || (item.notice.attachment.name && item.notice.attachment.name.toLowerCase().endsWith('.pdf'));
+            const attachPill = document.createElement('span');
+            attachPill.className = 'attachment-pill';
+            attachPill.textContent = isPdf ? '📎 PDF Circular' : '📎 Timetable';
+            header.appendChild(attachPill);
+        }
+
         card.appendChild(header);
 
         // Title
@@ -953,8 +1215,10 @@ function submitNotice() {
         appState.notices[index].content = content;
         appState.notices[index].deadline = deadline || null;
         appState.notices[index].priority = priority;
+        appState.notices[index].attachment = currentAdminAttachment || null;
 
         saveNotices();
+        currentAdminAttachment = null;
         showToast('Notice updated successfully!');
         goHome();
     } else {
@@ -969,11 +1233,13 @@ function submitNotice() {
             date: new Date().toISOString().split('T')[0],
             deadline: deadline || null,
             priority,
-            author: authorName
+            author: authorName,
+            attachment: currentAdminAttachment || null
         };
 
         appState.notices.unshift(newNotice);
         saveNotices();
+        currentAdminAttachment = null;
 
         showToast('Notice posted successfully!');
         sendNotification(title);
@@ -1017,15 +1283,150 @@ function shareNotice(id) {
     }
 }
 
-function addReminder(id) {
+// ===== CALENDAR & REMINDER SYNC (.ics & GOOGLE CALENDAR) =====
+function openReminderModal(id) {
     const notice = appState.notices.find(n => n.id === Number(id));
     if (!notice) return;
 
-    if (notice.deadline) {
-        showToast(`Reminder scheduled for deadline: ${notice.deadline}`);
-    } else {
-        showToast('Reminder noted for this announcement');
+    appState.activeReminderNoticeId = notice.id;
+
+    const modal = document.getElementById('reminderModal');
+    const modalTitle = document.getElementById('reminderModalTitle');
+    const modalDate = document.getElementById('reminderModalDate');
+
+    if (modalTitle) {
+        modalTitle.textContent = notice.title;
     }
+
+    if (modalDate) {
+        if (notice.deadline) {
+            modalDate.textContent = `⏰ Deadline: ${notice.deadline}`;
+            modalDate.style.color = 'var(--urgency-urgent)';
+        } else {
+            modalDate.textContent = `📅 Notice Date: ${notice.date}`;
+            modalDate.style.color = 'var(--text-light)';
+        }
+    }
+
+    if (modal) {
+        modal.style.display = 'flex';
+    }
+}
+
+function closeReminderModal(event) {
+    if (event && event.target && event.target.id !== 'reminderModal' && !event.target.classList.contains('modal-close-btn') && !event.target.classList.contains('btn-modal-cancel')) {
+        return;
+    }
+    const modal = document.getElementById('reminderModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+function getGoogleCalendarUrl(notice) {
+    const title = `[Notice Deadline] ${notice.title}`;
+    const desc = `${notice.content}\n\nIssued by: ${notice.author || 'Laxman Devram Sonawane College'}\nDigital Notice Board - University of Mumbai (FYCS)`;
+    const location = 'Laxman Devram Sonawane College, Kalyan (W)';
+
+    const dateStr = notice.deadline || notice.date || new Date().toISOString().split('T')[0];
+    const parts = dateStr.split('-');
+    const startYear = parseInt(parts[0], 10);
+    const startMonth = parseInt(parts[1], 10);
+    const startDay = parseInt(parts[2], 10);
+
+    const pad = n => String(n).padStart(2, '0');
+    const dtStart = `${startYear}${pad(startMonth)}${pad(startDay)}`;
+
+    const nextDate = new Date(startYear, startMonth - 1, startDay + 1);
+    const dtEnd = `${nextDate.getFullYear()}${pad(nextDate.getMonth() + 1)}${pad(nextDate.getDate())}`;
+
+    const dates = `${dtStart}/${dtEnd}`;
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&details=${encodeURIComponent(desc)}&location=${encodeURIComponent(location)}&dates=${dates}`;
+}
+
+function addToGoogleCalendar() {
+    if (!appState.activeReminderNoticeId) return;
+    const notice = appState.notices.find(n => n.id === appState.activeReminderNoticeId);
+    if (!notice) return;
+
+    const url = getGoogleCalendarUrl(notice);
+    window.open(url, '_blank');
+    closeReminderModal();
+    showToast('Opening Google Calendar...');
+}
+
+function generateIcsContent(notice) {
+    const title = (notice.title || 'Notice Deadline').replace(/[,;]/g, ' ');
+    const desc = (notice.content || '').replace(/\r?\n/g, '\\n').replace(/[,;]/g, ' ');
+    const author = notice.author || 'Laxman Devram Sonawane College';
+
+    const dateStr = notice.deadline || notice.date || new Date().toISOString().split('T')[0];
+    const parts = dateStr.split('-');
+    const startYear = parseInt(parts[0], 10);
+    const startMonth = parseInt(parts[1], 10);
+    const startDay = parseInt(parts[2], 10);
+
+    const pad = n => String(n).padStart(2, '0');
+    const dtStart = `${startYear}${pad(startMonth)}${pad(startDay)}`;
+
+    const nextDate = new Date(startYear, startMonth - 1, startDay + 1);
+    const dtEnd = `${nextDate.getFullYear()}${pad(nextDate.getMonth() + 1)}${pad(nextDate.getDate())}`;
+
+    const now = new Date();
+    const dtStamp = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}T${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}Z`;
+    const uid = `dnb-${notice.id}-${Date.now()}@digital-notice-board.college`;
+
+    return [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//Digital Notice Board//University of Mumbai FYCS//EN',
+        'CALSCALE:GREGORIAN',
+        'METHOD:PUBLISH',
+        'BEGIN:VEVENT',
+        `UID:${uid}`,
+        `DTSTAMP:${dtStamp}`,
+        `DTSTART;VALUE=DATE:${dtStart}`,
+        `DTEND;VALUE=DATE:${dtEnd}`,
+        `SUMMARY:[Notice Deadline] ${title}`,
+        `DESCRIPTION:${desc}\\n\\nIssued by: ${author}\\nDigital Notice Board - LD Sonawane College`,
+        'LOCATION:Laxman Devram Sonawane College, Kalyan (W)',
+        'STATUS:CONFIRMED',
+        'BEGIN:VALARM',
+        'ACTION:DISPLAY',
+        `DESCRIPTION:Deadline Reminder: ${title}`,
+        'TRIGGER:-P1D',
+        'END:VALARM',
+        'END:VEVENT',
+        'END:VCALENDAR'
+    ].join('\r\n');
+}
+
+function downloadIcsFile() {
+    if (!appState.activeReminderNoticeId) return;
+    const notice = appState.notices.find(n => n.id === appState.activeReminderNoticeId);
+    if (!notice) return;
+
+    try {
+        const icsData = generateIcsContent(notice);
+        const blob = new Blob([icsData], { type: 'text/calendar;charset=utf-8' });
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = `deadline-notice-${notice.id}.ics`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+        closeReminderModal();
+        showToast('Downloaded .ics! Open to add to calendar.');
+    } catch (e) {
+        console.error('Error generating .ics:', e);
+        showToast('Failed to generate calendar file');
+    }
+}
+
+function addReminder(id) {
+    openReminderModal(id);
 }
 
 // ===== NOTIFICATIONS =====
