@@ -3023,6 +3023,12 @@ function setupPullToRefresh() {
 
 // ===== SERVICE WORKER REGISTRATION =====
 function registerServiceWorker() {
+    // Service Workers require http:// or https:// (e.g. localhost). The file:/// protocol is restricted by browser security policies.
+    if (window.location.protocol === 'file:') {
+        console.info('[NoticeBoard] Running via file:/// protocol. (PWA offline caching & install banners require a local web server such as http://localhost:3000, while Firebase Auth and Firestore work directly).');
+        return;
+    }
+
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
             navigator.serviceWorker.register('./sw.js')
@@ -3030,7 +3036,7 @@ function registerServiceWorker() {
                     console.log('[PWA] Service Worker registered with scope:', reg.scope);
                 })
                 .catch(err => {
-                    console.error('[PWA] Service Worker registration failed:', err);
+                    console.warn('[PWA] Service Worker registration note:', err.message);
                 });
         });
     }
