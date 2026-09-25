@@ -28,28 +28,49 @@
     --text-muted: #94a3b8;
     --text-inverse: #ffffff;
 
-    /* Priority Indicator Borders */
-    --priority-high: #ef4444;
-    --priority-high-bg: #fef2f2;
-    --priority-high-text: #b91c1c;
+    /* Hybrid Priority & Urgency Color System */
+    --priority-urgent: #E53935;
+    --priority-urgent-bg: rgba(229, 57, 53, 0.08);
+    --priority-urgent-text: #c62828;
+    --priority-urgent-border: rgba(229, 57, 53, 0.28);
 
-    --priority-medium: #f59e0b;
-    --priority-medium-bg: #fffbeb;
-    --priority-medium-text: #b45309;
+    --priority-soon: #F57C00;
+    --priority-soon-bg: rgba(245, 124, 0, 0.08);
+    --priority-soon-text: #e65100;
+    --priority-soon-border: rgba(245, 124, 0, 0.28);
 
-    --priority-low: #10b981;
-    --priority-low-bg: #ecfdf5;
-    --priority-low-text: #047857;
+    --priority-later: #546E7A;
+    --priority-later-bg: rgba(84, 110, 122, 0.08);
+    --priority-later-text: #455a64;
+    --priority-later-border: rgba(84, 110, 122, 0.28);
+
+    --priority-general: #2e7d32;
+    --priority-general-bg: rgba(46, 125, 50, 0.08);
+    --priority-general-text: #1b5e20;
+    --priority-general-border: rgba(46, 125, 50, 0.28);
+
+    /* Priority Indicator Borders (Legacy Fallback) */
+    --priority-high: #E53935;
+    --priority-high-bg: rgba(229, 57, 53, 0.08);
+    --priority-high-text: #c62828;
+
+    --priority-medium: #F57C00;
+    --priority-medium-bg: rgba(245, 124, 0, 0.08);
+    --priority-medium-text: #e65100;
+
+    --priority-low: #2e7d32;
+    --priority-low-bg: rgba(46, 125, 50, 0.08);
+    --priority-low-text: #1b5e20;
 
     /* Urgency Colors (Timeline & Deadlines) */
-    --urgency-urgent: #c62828;
-    --urgency-urgent-bg: rgba(198, 40, 40, 0.08);
-    --urgency-upcoming: #e65100;
-    --urgency-upcoming-bg: rgba(230, 81, 0, 0.08);
-    --urgency-later: #2e7d32;
-    --urgency-later-bg: rgba(46, 125, 50, 0.08);
-    --urgency-expired: #64748b;
-    --urgency-expired-bg: rgba(100, 116, 139, 0.08);
+    --urgency-urgent: #E53935;
+    --urgency-urgent-bg: rgba(229, 57, 53, 0.08);
+    --urgency-upcoming: #F57C00;
+    --urgency-upcoming-bg: rgba(245, 124, 0, 0.08);
+    --urgency-later: #546E7A;
+    --urgency-later-bg: rgba(84, 110, 122, 0.08);
+    --urgency-expired: #546E7A;
+    --urgency-expired-bg: rgba(84, 110, 122, 0.08);
 
     /* Elevation & Shadows */
     --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
@@ -451,7 +472,7 @@ html, body {
 .notice-card {
     background: var(--bg-surface);
     border: 1px solid var(--border-light);
-    border-left: 4px solid var(--border-medium); /* Dynamic priority color */
+    border-left: 4px solid var(--priority-general); /* 4px colored left border */
     border-radius: var(--radius-md);
     padding: 16px 18px;
     cursor: pointer;
@@ -468,30 +489,100 @@ html, body {
     border-color: var(--border-medium);
 }
 
+/* 4px Left Border Accents by Urgency */
+.notice-card.urgent {
+    border-left-color: var(--priority-urgent, #E53935);
+}
+
+.notice-card.soon {
+    border-left-color: var(--priority-soon, #F57C00);
+}
+
+.notice-card.later {
+    border-left-color: var(--priority-later, #546E7A);
+}
+
+.notice-card.general {
+    border-left-color: var(--priority-general, #2e7d32); /* Matches existing green card style */
+}
+
+.notice-card.expired {
+    border-left-color: var(--priority-later, #546E7A);
+}
+
+/* Fallback priority classes */
 .notice-card.priority-high {
-    border-left-color: var(--priority-high);
+    border-left-color: var(--priority-urgent, #E53935);
 }
 
 .notice-card.priority-medium {
-    border-left-color: var(--priority-medium);
+    border-left-color: var(--priority-soon, #F57C00);
 }
 
 .notice-card.priority-low {
-    border-left-color: var(--priority-low);
+    border-left-color: var(--priority-general, #2e7d32);
 }
 
+/* Header: Title on Left, Urgency Pill on Top-Right */
 .notice-card-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    gap: 8px;
+    align-items: flex-start;
+    gap: 12px;
 }
 
-.notice-tags-row {
-    display: flex;
+.notice-card-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.4;
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+}
+
+/* Time-Based Urgency Pill (Pill format: 'Due in X days', matching border color) */
+.urgency-pill {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    padding: 3px 9px;
+    border-radius: var(--radius-pill);
+    white-space: nowrap;
+    flex-shrink: 0;
+    display: inline-flex;
     align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
+    border: 1px solid transparent;
+}
+
+.urgency-pill.urgent {
+    background: rgba(229, 57, 53, 0.08);
+    color: var(--priority-urgent, #E53935);
+    border-color: rgba(229, 57, 53, 0.28);
+}
+
+.urgency-pill.soon {
+    background: rgba(245, 124, 0, 0.08);
+    color: var(--priority-soon, #F57C00);
+    border-color: rgba(245, 124, 0, 0.28);
+}
+
+.urgency-pill.later {
+    background: rgba(84, 110, 122, 0.08);
+    color: var(--priority-later, #546E7A);
+    border-color: rgba(84, 110, 122, 0.28);
+}
+
+.urgency-pill.general {
+    background: rgba(46, 125, 50, 0.08);
+    color: var(--priority-general, #2e7d32);
+    border-color: rgba(46, 125, 50, 0.28);
+}
+
+.urgency-pill.expired {
+    background: rgba(84, 110, 122, 0.08);
+    color: #546E7A;
+    border-color: rgba(84, 110, 122, 0.28);
 }
 
 .category-tag {
@@ -525,37 +616,6 @@ html, body {
     color: #6b21a8;
 }
 
-.priority-badge {
-    font-size: 10.5px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-    padding: 2px 7px;
-    border-radius: var(--radius-sm);
-}
-
-.priority-badge.high {
-    background: var(--priority-high-bg);
-    color: var(--priority-high-text);
-}
-
-.priority-badge.medium {
-    background: var(--priority-medium-bg);
-    color: var(--priority-medium-text);
-}
-
-.priority-badge.low {
-    background: var(--priority-low-bg);
-    color: var(--priority-low-text);
-}
-
-.notice-card-title {
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--text-primary);
-    line-height: 1.4;
-}
-
 .notice-card-excerpt {
     font-size: 13px;
     color: var(--text-secondary);
@@ -564,6 +624,7 @@ html, body {
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    margin: 2px 0 4px 0;
 }
 
 .notice-card-footer {
@@ -574,19 +635,47 @@ html, body {
     border-top: 1px solid #f1f5f9;
     font-size: 12px;
     color: var(--text-muted);
+    gap: 8px;
+    flex-wrap: wrap;
 }
 
 .notice-meta-group {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     flex-wrap: wrap;
 }
 
 .notice-meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.notice-card-actions {
     display: flex;
     align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.btn-card-details {
+    display: inline-flex;
+    align-items: center;
     gap: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+    padding: 3px 6px;
+    border-radius: var(--radius-sm);
+    transition: all 0.15s ease;
+}
+
+.notice-card:hover .btn-card-details {
+    color: var(--accent-hover);
+    transform: translateX(2px);
 }
 
 .attachment-pill {

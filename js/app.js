@@ -17,9 +17,9 @@ let appState = {
     savedNotices: [], // Array of bookmarked notice IDs
     archivedNotices: [], // Array of archived notice IDs
     deadlineColors: {
-        urgent: '#c62828',   // < 48 hours
-        upcoming: '#e65100', // < 7 days
-        later: '#2e7d32'     // > 7 days
+        urgent: '#E53935',   // < 48 hours (Urgent)
+        upcoming: '#F57C00', // 2-7 days (Soon)
+        later: '#546E7A'     // > 7 days (Later)
     },
     // DUAL NOTIFICATION SYSTEM
     notificationSettings: {
@@ -375,9 +375,9 @@ function hexToRgba(hex, alpha = 0.08) {
 
 function applyUrgencyColors() {
     const colors = appState.deadlineColors || {
-        urgent: '#c62828',
-        upcoming: '#e65100',
-        later: '#2e7d32'
+        urgent: '#E53935',
+        upcoming: '#F57C00',
+        later: '#546E7A'
     };
 
     const root = document.documentElement;
@@ -387,6 +387,11 @@ function applyUrgencyColors() {
     root.style.setProperty('--urgency-upcoming-bg', hexToRgba(colors.upcoming, 0.08));
     root.style.setProperty('--urgency-later', colors.later);
     root.style.setProperty('--urgency-later-bg', hexToRgba(colors.later, 0.08));
+
+    // Hybrid priority variables
+    root.style.setProperty('--priority-urgent', colors.urgent);
+    root.style.setProperty('--priority-soon', colors.upcoming);
+    root.style.setProperty('--priority-later', colors.later);
 
     const inputUrgent = document.getElementById('urgencyColorUrgent');
     const inputUpcoming = document.getElementById('urgencyColorUpcoming');
@@ -399,12 +404,13 @@ function applyUrgencyColors() {
 
 function updateUrgencyColor(tier, hexValue) {
     if (!appState.deadlineColors) {
-        appState.deadlineColors = { urgent: '#c62828', upcoming: '#e65100', later: '#2e7d32' };
+        appState.deadlineColors = { urgent: '#E53935', upcoming: '#F57C00', later: '#546E7A' };
     }
     appState.deadlineColors[tier] = hexValue;
     saveState();
     applyUrgencyColors();
 
+    renderNotices();
     if (appState.currentView === 'deadlines') {
         renderDeadlines();
     }
@@ -413,17 +419,87 @@ function updateUrgencyColor(tier, hexValue) {
 
 function resetUrgencyColors() {
     appState.deadlineColors = {
-        urgent: '#c62828',
-        upcoming: '#e65100',
-        later: '#2e7d32'
+        urgent: '#E53935',
+        upcoming: '#F57C00',
+        later: '#546E7A'
     };
     saveState();
     applyUrgencyColors();
 
+    renderNotices();
     if (appState.currentView === 'deadlines') {
         renderDeadlines();
     }
     showToast('Reset urgency colors to default');
+}
+
+// ===== HYBRID PRIORITY & URGENCY MAPPING =====
+function getNoticeUrgencyInfo(notice) {
+    if (!notice || !notice.deadline) {
+        return {
+            tier: 'general',
+            color: '#2e7d32', // Matches existing green card style
+            pillText: 'No deadline',
+            diffDays: null
+        };
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const parts = String(notice.deadline).split('T')[0].split('-').map(Number);
+    const deadlineDate = new Date(parts[0], parts[1] - 1, parts[2]);
+    deadlineDate.setHours(0, 0, 0, 0);
+    const diffDays = Math.round((deadlineDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+    const colors = appState.deadlineColors || {
+        urgent: '#E53935',
+        upcoming: '#F57C00',
+        later: '#546E7A'
+    };
+
+    if (diffDays < 0) {
+        return {
+            tier: 'expired',
+            color: colors.later || '#546E7A',
+            pillText: 'Deadline passed',
+            diffDays
+        };
+    } else if (diffDays === 0) {
+        return {
+            tier: 'urgent',
+            color: colors.urgent || '#E53935',
+            pillText: 'Due today',
+            diffDays
+        };
+    } else if (diffDays === 1) {
+        return {
+            tier: 'urgent',
+            color: colors.urgent || '#E53935',
+            pillText: 'Due in 1 day',
+            diffDays
+        };
+    } else if (diffDays <= 2) {
+        return {
+            tier: 'urgent',
+            color: colors.urgent || '#E53935',
+            pillText: `Due in ${diffDays} days`,
+            diffDays
+        };
+    } else if (diffDays <= 7) {
+        return {
+            tier: 'soon',
+            color: colors.upcoming || '#F57C00',
+            pillText: `Due in ${diffDays} days`,
+            diffDays
+        };
+    } else {
+        return {
+            tier: 'later',
+            color: colors.later || '#546E7A',
+            pillText: `Due in ${diffDays} days`,
+            diffDays
+        };
+    }
 }
 
 // ===== AUTHENTICATION =====
@@ -743,11 +819,11 @@ function renderNotices(noticesToRender = null) {
 
     notices.forEach(notice => {
         const card = document.createElement('article');
-        const prio = (notice.priority || 'medium').toLowerCase();
-        card.className = `notice-card priority-${prio}`;
+        const urgency = getNoticeUrgencyInfo(notice);
+        card.className = `notice-card ${urgency.tier}`;
         card.setAttribute('role', 'button');
         card.setAttribute('tabindex', '0');
-        card.setAttribute('aria-label', `${notice.title}, Priority: ${prio}`);
+        card.setAttribute('aria-label', `${notice.title}, ${urgency.pillText || 'Notice'}`);
 
         card.addEventListener('click', () => viewNotice(notice.id));
         card.addEventListener('keydown', (e) => {
@@ -757,52 +833,42 @@ function renderNotices(noticesToRender = null) {
             }
         });
 
-        // Header: Category Tag & Priority Badge
+        // Top Row: Title on left, Time-Based Urgency Pill on top-right
         const cardHeader = document.createElement('div');
         cardHeader.className = 'notice-card-header';
 
-        const tagsRow = document.createElement('div');
-        tagsRow.className = 'notice-tags-row';
-
-        const catTag = document.createElement('span');
-        const catClass = (notice.category || 'Academic').toLowerCase();
-        catTag.className = `category-tag ${catClass}`;
-        catTag.textContent = notice.category || 'Academic';
-        tagsRow.appendChild(catTag);
-
-        if (notice.attachment) {
-            const attachPill = document.createElement('span');
-            attachPill.className = 'attachment-pill';
-            attachPill.innerHTML = `${SVG_ICONS.paperclip} <span>Attachment</span>`;
-            tagsRow.appendChild(attachPill);
-        }
-
-        const prioBadge = document.createElement('span');
-        prioBadge.className = `priority-badge ${prio}`;
-        prioBadge.textContent = prio.toUpperCase();
-
-        cardHeader.appendChild(tagsRow);
-        cardHeader.appendChild(prioBadge);
-        card.appendChild(cardHeader);
-
-        // Title
         const titleEl = document.createElement('h3');
         titleEl.className = 'notice-card-title';
         titleEl.textContent = notice.title;
-        card.appendChild(titleEl);
+        cardHeader.appendChild(titleEl);
 
-        // Excerpt
+        if (urgency.pillText) {
+            const pill = document.createElement('span');
+            pill.className = `urgency-pill ${urgency.tier}`;
+            pill.textContent = urgency.pillText;
+            cardHeader.appendChild(pill);
+        }
+
+        card.appendChild(cardHeader);
+
+        // Middle: Description / Content Excerpt
         const excerptEl = document.createElement('p');
         excerptEl.className = 'notice-card-excerpt';
         excerptEl.textContent = notice.content;
         card.appendChild(excerptEl);
 
-        // Footer: Metadata & Actions
+        // Bottom Row: Category • Date • 👤 Author on left, Details on right
         const footer = document.createElement('div');
         footer.className = 'notice-card-footer';
 
         const metaGroup = document.createElement('div');
         metaGroup.className = 'notice-meta-group';
+
+        const catTag = document.createElement('span');
+        const catClass = (notice.category || 'Academic').toLowerCase();
+        catTag.className = `category-tag ${catClass}`;
+        catTag.textContent = notice.category || 'Academic';
+        metaGroup.appendChild(catTag);
 
         const dateItem = document.createElement('div');
         dateItem.className = 'notice-meta-item';
@@ -816,12 +882,25 @@ function renderNotices(noticesToRender = null) {
             metaGroup.appendChild(authorItem);
         }
 
+        if (notice.attachment) {
+            const attachItem = document.createElement('div');
+            attachItem.className = 'notice-meta-item attachment-meta-item';
+            attachItem.innerHTML = `${SVG_ICONS.paperclip} <span>Attachment</span>`;
+            metaGroup.appendChild(attachItem);
+        }
+
         footer.appendChild(metaGroup);
 
-        if (appState.isAdmin) {
-            const adminActions = document.createElement('div');
-            adminActions.className = 'card-admin-actions';
+        // Actions: Details Link & Admin Controls
+        const actionsGroup = document.createElement('div');
+        actionsGroup.className = 'notice-card-actions';
 
+        const detailsBtn = document.createElement('span');
+        detailsBtn.className = 'btn-card-details';
+        detailsBtn.innerHTML = `<span>Details</span> <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
+        actionsGroup.appendChild(detailsBtn);
+
+        if (appState.isAdmin) {
             const editBtn = document.createElement('button');
             editBtn.className = 'btn-card-action';
             editBtn.innerHTML = `${SVG_ICONS.edit} <span>Edit</span>`;
@@ -830,7 +909,7 @@ function renderNotices(noticesToRender = null) {
                 e.stopPropagation();
                 openEditNotice(notice.id);
             });
-            adminActions.appendChild(editBtn);
+            actionsGroup.appendChild(editBtn);
 
             const delBtn = document.createElement('button');
             delBtn.className = 'btn-card-action btn-card-delete';
@@ -840,11 +919,10 @@ function renderNotices(noticesToRender = null) {
                 e.stopPropagation();
                 deleteNotice(notice.id);
             });
-            adminActions.appendChild(delBtn);
-
-            footer.appendChild(adminActions);
+            actionsGroup.appendChild(delBtn);
         }
 
+        footer.appendChild(actionsGroup);
         card.appendChild(footer);
         fragment.appendChild(card);
     });
@@ -1023,11 +1101,11 @@ function renderDeadlines(noticesToRender = null) {
         const footer = document.createElement('div');
         footer.className = 'timeline-footer';
 
-        const prioSpan = document.createElement('span');
-        const prio = (item.notice.priority || 'medium').toLowerCase();
-        prioSpan.className = `priority-badge ${prio}`;
-        prioSpan.textContent = prio.toUpperCase();
-        footer.appendChild(prioSpan);
+        const catTag = document.createElement('span');
+        const catClass = (item.notice.category || 'Academic').toLowerCase();
+        catTag.className = `category-tag ${catClass}`;
+        catTag.textContent = item.notice.category || 'Academic';
+        footer.appendChild(catTag);
 
         const actions = document.createElement('div');
         actions.className = 'timeline-actions';
@@ -1090,10 +1168,13 @@ function viewNotice(id) {
     catTag.textContent = notice.category || 'Academic';
     catRow.appendChild(catTag);
 
-    const prioBadge = document.createElement('span');
-    prioBadge.className = `priority-badge ${prio}`;
-    prioBadge.textContent = `${prio.toUpperCase()} PRIORITY`;
-    catRow.appendChild(prioBadge);
+    const urgency = getNoticeUrgencyInfo(notice);
+    if (urgency.pillText) {
+        const urgencyPill = document.createElement('span');
+        urgencyPill.className = `urgency-pill ${urgency.tier}`;
+        urgencyPill.textContent = urgency.pillText;
+        catRow.appendChild(urgencyPill);
+    }
 
     articleCard.appendChild(catRow);
 
@@ -1889,10 +1970,10 @@ function isNoticeUnder48Hours(notice) {
     if (!notice || !notice.deadline) return false;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const deadlineDate = new Date(notice.deadline);
-    deadlineDate.setHours(23, 59, 59, 999);
-    const diffMs = deadlineDate.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    const parts = String(notice.deadline).split('T')[0].split('-').map(Number);
+    const deadlineDate = new Date(parts[0], parts[1] - 1, parts[2]);
+    deadlineDate.setHours(0, 0, 0, 0);
+    const diffDays = Math.round((deadlineDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
     return diffDays >= 0 && diffDays <= 2;
 }
 
@@ -2105,7 +2186,7 @@ function triggerDailyDigestNow(isManual = false) {
             item.innerHTML = `
                 <div class="digest-item-info">
                     <span class="digest-item-title">${escapeHtml(notice.title)}</span>
-                    <span class="digest-item-meta">${escapeHtml(notice.category || 'General')} • ${prio.toUpperCase()} • ${dateStr}</span>
+                    <span class="digest-item-meta">${escapeHtml(notice.category || 'General')} • ${dateStr}</span>
                 </div>
                 <button type="button" class="btn btn-secondary btn-sm" onclick="openNoticeFromDigest(${notice.id})">
                     View

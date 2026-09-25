@@ -7,7 +7,7 @@
  * 4. Web Push Notification and Notification Click Handlers
  */
 
-const CACHE_NAME = 'notice-board-v6';
+const CACHE_NAME = 'notice-board-v7';
 const STATIC_ASSETS = [
     './',
     './index.html',
