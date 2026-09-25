@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#003D82">
+    <meta name="description" content="Digital Notice Board - Centralized College Communication System">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect fill='%23003D82' width='180' height='180'/><text x='90' y='100' font-size='80' fill='white' text-anchor='middle' font-weight='bold'>NB</text></svg>">
+    <title>Digital Notice Board</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #003D82;
+            --secondary: #2ECC71;
+            --bg: #F5F5F5;
+            --text-dark: #1a1a1a;
+            --text-light: #666;
+            --border: #DCDCDC;
+            --shadow: 0 2px 8px rgba(0,0,0,0.1);
+            --safe-top: env(safe-area-inset-top, 0px);
+            --safe-bottom: env(safe-area-inset-bottom, 0px);
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            font-family: 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--text-dark);
+            padding-top: var(--safe-top);
+            padding-bottom: var(--safe-bottom);
+        }
+
+        /* Main Container */
+        #app {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            background: white;
+        }
+
+        /* Header */
+        .header {
+            background: var(--primary);
+            color: white;
+            padding: 16px;
+            padding-top: calc(16px + var(--safe-top));
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: var(--shadow);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .header-icons {
+            display: flex;
+            gap: 12px;
+        }
+
+        button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+
+        .header button {
+            color: white;
+            font-size: 20px;
+        }
+
+        .header button:active {
+            background: rgba(255,255,255,0.2);
+        }
+
+        /* Screen Management */
+        .screen {
+            display: none;
+            flex: 1;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .screen.active {
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* HOME SCREEN */
+        .home-screen {
+            background: white;
+        }
+
+        .search-container {
+            padding: 16px;
+            background: white;
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        .search-box {
+            display: flex;
+            align-items: center;
+            background: var(--bg);
+            border-radius: 8px;
+            padding: 8px 12px;
+            gap: 8px;
+        }
+
+        .search-box input {
+            flex: 1;
+            border: none;
+            background: none;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .notice-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 0;
+        }
+
+        .notice-card {
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+        }
+
+        .notice-card:active {
+            background: var(--bg);
+        }
+
+        .notice-content {
+            flex: 1;
+        }
+
+        .notice-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-dark);
+            margin-bottom: 4px;
+        }
+
+        .notice-date {
+            font-size: 12px;
+            color: var(--text-light);
+        }
+
+        .notice-priority {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+
+        .priority-high {
+            background: #ffe6e1;
+            color: #c62828;
+        }
+
+        .priority-medium {
+            background: #fff3e0;
+            color: #e65100;
+        }
+
+        .priority-low {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        /* FAB */
+        .fab {
+            position: fixed;
+            bottom: calc(20px + var(--safe-bottom));
+            right: 20px;
+            width: 56px;
+            height: 56px;
+            background: var(--secondary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+            box-shadow: var(--shadow);
+            cursor: pointer;
+            z-index: 90;
+            transition: transform 0.2s;
+        }
+
+        .fab:active {
+            transform: scale(0.95);
+        }
+
+        .fab.hidden {
+            display: none;
+        }
+
+        /* DETAIL SCREEN */
+        .detail-screen {
+            background: white;
+            padding: 16px;
+            padding-bottom: calc(16px + var(--safe-bottom));
+        }
+
+        .detail-back {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 16px;
+            cursor: pointer;
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        .notice-detail {
+            background: white;
+        }
+
+        .notice-detail h2 {
+            font-size: 20px;
+            margin-bottom: 8px;
+            color: var(--text-dark);
+        }
+
+        .notice-meta {
+            display: flex;
+            gap: 16px;
+            font-size: 12px;
+            color: var(--text-light);
+            margin-bottom: 16px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .notice-body {
+            font-size: 16px;
+            line-height: 1.6;
+            color: var(--text-dark);
+            margin-bottom: 16px;
+        }
+
+        .notice-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .notice-actions button {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--primary);
+            background: white;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .notice-actions button:active {
+            background: var(--bg);
+        }
+
+        /* ADMIN SCREEN */
+        .admin-screen {
+            padding: 16px;
+            padding-bottom: calc(16px + var(--safe-bottom));
+            overflow-y: auto;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: var(--text-dark);
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+            color: var(--text-dark);
+            outline: none;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 120px;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(0, 61, 130, 0.1);
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 14px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .submit-btn:active {
+            background: #002d66;
+        }
+
+        /* SETTINGS SCREEN */
+        .settings-screen {
+            padding: 16px;
+            padding-bottom: calc(16px + var(--safe-bottom));
+            overflow-y: auto;
+        }
+
+        .settings-section {
+            margin-bottom: 24px;
+        }
+
+        .settings-section h3 {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-light);
+            margin-bottom: 12px;
+            text-transform: uppercase;
+        }
+
+        .settings-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .toggle {
+            width: 44px;
+            height: 24px;
+            background: #ccc;
+            border-radius: 12px;
+            cursor: pointer;
+            position: relative;
+            transition: background 0.2s;
+        }
+
+        .toggle.on {
+            background: var(--secondary);
+        }
+
+        .toggle-switch {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 20px;
+            height: 20px;
+            background: white;
+            border-radius: 50%;
+            transition: left 0.2s;
+        }
+
+        .toggle.on .toggle-switch {
+            left: 22px;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 200;
+            align-items: flex-end;
+            animation: slideUp 0.3s ease;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+        }
+
+        .modal-content {
+            background: white;
+            width: 100%;
+            border-radius: 12px 12px 0 0;
+            padding: 16px;
+            padding-bottom: calc(16px + var(--safe-bottom));
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+
+        .modal-option {
+            padding: 12px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .modal-option:active {
+            background: var(--bg);
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 16px;
+            right: 16px;
+            background: var(--text-dark);
+            color: white;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 300;
+            animation: slideUp 0.3s ease;
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Loading State */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid var(--bg);
+            border-top: 4px solid var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Empty State */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            padding: 32px;
+            text-align: center;
+            color: var(--text-light);
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        /* Login Screen */
+        .login-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 32px 16px;
+            min-height: 100%;
+            background: white;
+        }
+
+        .login-box {
+            width: 100%;
+            max-width: 320px;
+        }
+
+        .login-title {
+            font-size: 24px;
+            font-weight: 600;
+            text-align: center;
+            margin-bottom: 32px;
+            color: var(--primary);
+        }
+
+        .login-input {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 12px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 12px;
+        }
+
+        .login-info {
+            margin-top: 20px;
+            padding: 12px;
+            background: var(--bg);
+            border-radius: 8px;
+            font-size: 12px;
+            text-align: center;
+            color: var(--text-light);
+        }
+
+        /* Responsive */
+        @media (min-width: 600px) {
+            .header h1 {
+                font-size: 24px;
+            }
+
+            .notice-card {
+                padding: 20px;
+            }
+
+            .detail-screen {
+                max-width: 600px;
+                margin: 0 auto;
+            }
+
+            .admin-screen {
+                max-width: 600px;
+                margin: 0 auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- LOGIN SCREEN -->
+        <div id="loginScreen" class="screen active">
+            <div class="login-screen">
+                <div class="login-box">
+                    <div class="login-title">📢 Notice Board</div>
+                    <input type="text" id="usernameInput" class="login-input" placeholder="Username" value="student">
+                    <input type="password" id="passwordInput" class="login-input" placeholder="Password" value="">
+                    <button class="login-btn" onclick="login()">Login</button>
+                    <div class="login-info">
+                        <strong>Demo Credentials:</strong><br>
+                        Student: username "student"<br>
+                        Admin: username "admin" (for posting)
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- HOME SCREEN -->
+        <div id="homeScreen" class="screen">
+            <div class="header">
+                <h1>Notices</h1>
+                <div class="header-icons">
+                    <button onclick="openSettings()">⚙️</button>
+                    <button onclick="logout()">👤</button>
+                </div>
+            </div>
+            <div class="search-container">
+                <div class="search-box">
+                    <span>🔍</span>
+                    <input type="text" id="searchInput" placeholder="Search notices..." onkeyup="filterNotices()">
+                </div>
+            </div>
+            <div class="notice-list" id="noticeList"></div>
+            <button class="fab" id="fab" onclick="openAdmin()">+</button>
+        </div>
+
+        <!-- DETAIL SCREEN -->
+        <div id="detailScreen" class="screen">
+            <div class="header">
+                <h1>Notice</h1>
+                <button onclick="goHome()">✕</button>
+            </div>
+            <div class="detail-screen">
+                <div id="noticeDetail"></div>
+            </div>
+        </div>
+
+        <!-- ADMIN SCREEN -->
+        <div id="adminScreen" class="screen">
+            <div class="header">
+                <h1>Post Notice</h1>
+                <button onclick="goHome()">✕</button>
+            </div>
+            <div class="admin-screen">
+                <div class="form-group">
+                    <label>Title *</label>
+                    <input type="text" id="noticeTitle" placeholder="Notice title">
+                </div>
+                <div class="form-group">
+                    <label>Content *</label>
+                    <textarea id="noticeContent" placeholder="Notice content"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Deadline</label>
+                    <input type="date" id="noticeDeadline">
+                </div>
+                <div class="form-group">
+                    <label>Priority</label>
+                    <select id="noticePriority">
+                        <option value="low">Low</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="high">High</option>
+                    </select>
+                </div>
+                <button class="submit-btn" onclick="submitNotice()">Post Notice</button>
+            </div>
+        </div>
+
+        <!-- SETTINGS SCREEN -->
+        <div id="settingsScreen" class="screen">
+            <div class="header">
+                <h1>Settings</h1>
+                <button onclick="goHome()">✕</button>
+            </div>
+            <div class="settings-screen">
+                <div class="settings-section">
+                    <h3>Notifications</h3>
+                    <div class="settings-item">
+                        <span>Enable Notifications</span>
+                        <div class="toggle" id="notifToggle" onclick="toggleNotifications()">
+                            <div class="toggle-switch"></div>
+                        </div>
+                    </div>
+                    <div class="settings-item">
+                        <label>Notification Time</label>
+                    </div>
+                    <div style="padding: 12px;">
+                        <select id="notifTime" onchange="updateNotifTime()">
+                            <option value="morning">Morning (8 AM)</option>
+                            <option value="afternoon">Afternoon (1 PM)</option>
+                            <option value="evening">Evening (6 PM)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="settings-section">
+                    <h3>About</h3>
+                    <div class="settings-item">
+                        <span>Digital Notice Board</span>
+                        <span>v1.0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast"></div>
+
+    <script>
+        // ===== APP STATE =====
+        let appState = {
+            user: null,
+            isAdmin: false,
+            notificationsEnabled: false,
+            notificationsTime: 'morning',
+            notices: []
+        };
+
+        // ===== SAMPLE DATA =====
+        const sampleNotices = [
+            {
+                id: 1,
+                title: 'Semester Exam Schedule Released',
+                content: 'The official exam schedule for this semester has been released. Please check the student portal for detailed information about exam dates, timings, and venues.',
+                date: new Date().toISOString().split('T')[0],
+                deadline: '2025-01-15',
+                priority: 'high',
+                author: 'Academic Office'
+            },
+            {
+                id: 2,
+                title: 'Library Extended Hours',
+                content: 'The library will be open till 8 PM starting next week to support students preparing for exams.',
+                date: new Date().toISOString().split('T')[0],
+                deadline: null,
+                priority: 'medium',
+                author: 'Library'
+            },
+            {
+                id: 3,
+                title: 'Scholarship Application Deadline',
+                content: 'Last date to submit scholarship applications is December 20, 2025. Submit through the college portal.',
+                date: new Date().toISOString().split('T')[0],
+                deadline: '2025-12-20',
+                priority: 'high',
+                author: 'Financial Aid'
+            },
+            {
+                id: 4,
+                title: 'Campus Maintenance Work',
+                content: 'Electrical maintenance will be done on Building C from 10 AM to 2 PM next Tuesday. Please plan accordingly.',
+                date: new Date().toISOString().split('T')[0],
+                deadline: null,
+                priority: 'low',
+                author: 'Facilities'
+            }
+        ];
+
+        // ===== INITIALIZATION =====
+        function init() {
+            loadState();
+            loadNotices();
+            registerServiceWorker();
+            setupPullToRefresh();
+        }
+
+        function loadState() {
+            const saved = localStorage.getItem('appState');
+            if (saved) {
+                appState = JSON.parse(saved);
+            } else {
+                saveState();
+            }
+        }
+
+        function saveState() {
+            localStorage.setItem('appState', JSON.stringify(appState));
+        }
+
+        function loadNotices() {
+            const saved = localStorage.getItem('notices');
+            appState.notices = saved ? JSON.parse(saved) : sampleNotices;
+            renderNotices();
+        }
+
+        function saveNotices() {
+            localStorage.setItem('notices', JSON.stringify(appState.notices));
+        }
+
+        // ===== AUTHENTICATION =====
+        function login() {
+            const username = document.getElementById('usernameInput').value;
+            if (!username) {
+                showToast('Please enter username');
+                return;
+            }
+            appState.user = {
+                username: username,
+                loginTime: new Date().toISOString()
+            };
+            appState.isAdmin = username === 'admin';
+            saveState();
+            showScreen('homeScreen');
+            renderNotices();
+            updateFAB();
+        }
+
+        function logout() {
+            if (confirm('Logout?')) {
+                appState.user = null;
+                appState.isAdmin = false;
+                saveState();
+                showScreen('loginScreen');
+                document.getElementById('usernameInput').value = 'student';
+                document.getElementById('passwordInput').value = '';
+            }
+        }
+
+        // ===== SCREEN MANAGEMENT =====
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(screenId).classList.add('active');
+        }
+
+        function goHome() {
+            showScreen('homeScreen');
+            renderNotices();
+        }
+
+        function openAdmin() {
+            if (!appState.isAdmin) {
+                showToast('Only admins can post notices');
+                return;
+            }
+            document.getElementById('noticeTitle').value = '';
+            document.getElementById('noticeContent').value = '';
+            document.getElementById('noticeDeadline').value = '';
+            document.getElementById('noticePriority').value = 'medium';
+            showScreen('adminScreen');
+        }
+
+        function openSettings() {
+            updateNotifToggle();
+            showScreen('settingsScreen');
+        }
+
+        function updateFAB() {
+            const fab = document.getElementById('fab');
+            if (appState.isAdmin) {
+                fab.classList.remove('hidden');
+            } else {
+                fab.classList.add('hidden');
+            }
+        }
+
+        // ===== NOTICE MANAGEMENT =====
+        function renderNotices() {
+            const list = document.getElementById('noticeList');
+            if (appState.notices.length === 0) {
+                list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><p>No notices yet</p></div>';
+                return;
+            }
+
+            list.innerHTML = appState.notices.map(notice => `
+                <div class="notice-card" onclick="viewNotice(${notice.id})">
+                    <div class="notice-content">
+                        <div class="notice-title">${notice.title}</div>
+                        <div class="notice-date">📅 ${notice.date}${notice.deadline ? ` • Deadline: ${notice.deadline}` : ''}</div>
+                    </div>
+                    <span class="notice-priority priority-${notice.priority}">${notice.priority.toUpperCase()}</span>
+                </div>
+            `).join('');
+        }
+
+        function viewNotice(id) {
+            const notice = appState.notices.find(n => n.id === id);
+            if (!notice) return;
+
+            const detail = document.getElementById('noticeDetail');
+            detail.innerHTML = `
+                <div class="notice-detail">
+                    <h2>${notice.title}</h2>
+                    <div class="notice-meta">
+                        <span>📅 ${notice.date}</span>
+                        <span>✍️ ${notice.author}</span>
+                    </div>
+                    <div class="notice-body">${notice.content}</div>
+                    ${notice.deadline ? `<div style="padding: 12px; background: #fff3e0; border-radius: 8px; margin: 16px 0;"><strong>Deadline:</strong> ${notice.deadline}</div>` : ''}
+                    <div class="notice-actions">
+                        <button onclick="shareNotice('${notice.title}')">Share</button>
+                        <button onclick="addReminder(${notice.id})">Remind Me</button>
+                    </div>
+                </div>
+            `;
+            showScreen('detailScreen');
+        }
+
+        function filterNotices() {
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            const list = document.getElementById('noticeList');
+            
+            const filtered = appState.notices.filter(notice =>
+                notice.title.toLowerCase().includes(query) ||
+                notice.content.toLowerCase().includes(query)
+            );
+
+            if (filtered.length === 0) {
+                list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🔍</div><p>No results found</p></div>';
+                return;
+            }
+
+            list.innerHTML = filtered.map(notice => `
+                <div class="notice-card" onclick="viewNotice(${notice.id})">
+                    <div class="notice-content">
+                        <div class="notice-title">${notice.title}</div>
+                        <div class="notice-date">📅 ${notice.date}${notice.deadline ? ` • Deadline: ${notice.deadline}` : ''}</div>
+                    </div>
+                    <span class="notice-priority priority-${notice.priority}">${notice.priority.toUpperCase()}</span>
+                </div>
+            `).join('');
+        }
+
+        function submitNotice() {
+            const title = document.getElementById('noticeTitle').value.trim();
+            const content = document.getElementById('noticeContent').value.trim();
+            const deadline = document.getElementById('noticeDeadline').value;
+            const priority = document.getElementById('noticePriority').value;
+
+            if (!title || !content) {
+                showToast('Please fill title and content');
+                return;
+            }
+
+            const newNotice = {
+                id: Math.max(...appState.notices.map(n => n.id), 0) + 1,
+                title,
+                content,
+                date: new Date().toISOString().split('T')[0],
+                deadline: deadline || null,
+                priority,
+                author: 'Admin'
+            };
+
+            appState.notices.unshift(newNotice);
+            saveNotices();
+            showToast('Notice posted successfully!');
+            sendNotification(title);
+            goHome();
+        }
+
+        function shareNotice(title) {
+            if (navigator.share) {
+                navigator.share({
+                    title: 'Notice',
+                    text: title,
+                    url: window.location.href
+                });
+            } else {
+                showToast('Shared!');
+            }
+        }
+
+        function addReminder(id) {
+            const notice = appState.notices.find(n => n.id === id);
+            if (notice && notice.deadline) {
+                showToast(`Reminder set for ${notice.deadline}`);
+            }
+        }
+
+        // ===== NOTIFICATIONS =====
+        function toggleNotifications() {
+            appState.notificationsEnabled = !appState.notificationsEnabled;
+            saveState();
+            updateNotifToggle();
+            if (appState.notificationsEnabled && 'Notification' in window) {
+                Notification.requestPermission();
+            }
+            showToast(appState.notificationsEnabled ? 'Notifications enabled' : 'Notifications disabled');
+        }
+
+        function updateNotifToggle() {
+            const toggle = document.getElementById('notifToggle');
+            if (appState.notificationsEnabled) {
+                toggle.classList.add('on');
+            } else {
+                toggle.classList.remove('on');
+            }
+        }
+
+        function updateNotifTime() {
+            appState.notificationsTime = document.getElementById('notifTime').value;
+            saveState();
+            showToast('Notification time updated');
+        }
+
+        function sendNotification(title) {
+            if (!appState.notificationsEnabled || !('Notification' in window)) return;
+            
+            if (Notification.permission === 'granted') {
+                new Notification('Digital Notice Board', {
+                    body: title,
+                    icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180"><rect fill="%23003D82" width="180" height="180"/><text x="90" y="100" font-size="80" fill="white" text-anchor="middle" font-weight="bold">NB</text></svg>'
+                });
+            }
+        }
+
+        // ===== SERVICE WORKER =====
+        function registerServiceWorker() {
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('data:application/javascript,' + encodeURIComponent(`
+                    self.addEventListener('install', e => {
+                        e.waitUntil(caches.open('v1').then(cache => {
+                            return cache.addAll(['/']);
+                        }));
+                    });
+
+                    self.addEventListener('fetch', e => {
+                        e.respondWith(
+                            caches.match(e.request).then(response => {
+                                return response || fetch(e.request);
+                            })
+                        );
+                    });
+
+                    self.addEventListener('push', e => {
+                        const data = e.data.json();
+                        self.registration.showNotification(data.title, {
+                            body: data.body,
+                            icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180"><rect fill="%23003D82" width="180" height="180"/></svg>'
+                        });
+                    });
+                `)).catch(() => {});
+            }
+        }
+
+        // ===== PULL TO REFRESH =====
+        function setupPullToRefresh() {
+            let startY = 0;
+            document.addEventListener('touchstart', e => {
+                startY = e.touches[0].clientY;
+            });
+
+            document.addEventListener('touchmove', e => {
+                if (e.touches[0].clientY - startY > 80 && document.getElementById('homeScreen').classList.contains('active')) {
+                    loadNotices();
+                    showToast('Refreshed');
+                }
+            });
+        }
+
+        // ===== UTILS =====
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2000);
+        }
+
+        // ===== MANIFEST =====
+        function createManifest() {
+            const manifest = {
+                name: "Digital Notice Board",
+                short_name: "Notices",
+                start_url: "/",
+                display: "standalone",
+                background_color: "#ffffff",
+                theme_color: "#003D82",
+                icons: [{
+                    src: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect fill='%23003D82' width='192' height='192'/><text x='96' y='120' font-size='100' fill='white' text-anchor='middle' font-weight='bold'>NB</text></svg>",
+                    sizes: "192x192",
+                    type: "image/svg+xml"
+                }]
+            };
+            const link = document.createElement('link');
+            link.rel = 'manifest';
+            link.href = 'data:application/json,' + encodeURIComponent(JSON.stringify(manifest));
+            document.head.appendChild(link);
+        }
+
+        // ===== START =====
+        init();
+        createManifest();
+    </script>
+</body>
+</html>
