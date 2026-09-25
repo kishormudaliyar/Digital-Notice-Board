@@ -44,6 +44,12 @@
                     <button aria-label="Logout" title="Logout" onclick="logout()">👤</button>
                 </div>
             </header>
+            <!-- View Mode Switcher -->
+            <div class="view-toggle-container">
+                <button class="view-toggle-btn active" id="viewFeedBtn" onclick="switchView('feed')">📋 Feed View</button>
+                <button class="view-toggle-btn" id="viewDeadlinesBtn" onclick="switchView('deadlines')">📅 Deadline View</button>
+            </div>
+
             <div class="search-container">
                 <div class="search-box">
                     <span>🔍</span>
@@ -51,6 +57,7 @@
                 </div>
             </div>
             <div class="notice-list" id="noticeList"></div>
+            <div class="deadline-timeline" id="deadlineTimeline" style="display: none;"></div>
             <button class="fab" id="fab" aria-label="Add Notice" onclick="openAdmin()">+</button>
         </div>
 
@@ -65,13 +72,14 @@
             </div>
         </div>
 
-        <!-- ADMIN SCREEN -->
+        <!-- ADMIN / EDIT SCREEN -->
         <div id="adminScreen" class="screen">
             <header class="header">
-                <h1>Post Notice</h1>
+                <h1 id="adminScreenTitle">Post Notice</h1>
                 <button aria-label="Close" onclick="goHome()">✕</button>
             </header>
             <div class="admin-screen">
+                <input type="hidden" id="noticeId" value="">
                 <div class="form-group">
                     <label for="noticeTitle">Title *</label>
                     <input type="text" id="noticeTitle" placeholder="e.g. Campus Placement Drive" required>
@@ -92,7 +100,7 @@
                         <option value="high">High</option>
                     </select>
                 </div>
-                <button class="submit-btn" onclick="submitNotice()">Post Notice</button>
+                <button class="submit-btn" id="adminSubmitBtn" onclick="submitNotice()">Post Notice</button>
             </div>
         </div>
 
@@ -120,6 +128,41 @@
                             <option value="afternoon">Afternoon (1:00 PM)</option>
                             <option value="evening">Evening (6:00 PM)</option>
                         </select>
+                    </div>
+                </div>
+                <div class="settings-section">
+                    <h3>Deadline Urgency Colors</h3>
+                    <div class="settings-item">
+                        <div>
+                            <strong>Urgent (&lt; 48 hours)</strong>
+                            <div style="font-size: 11px; color: var(--text-light);">Imminent deadlines</div>
+                        </div>
+                        <input type="color" id="urgencyColorUrgent" value="#c62828" onchange="updateUrgencyColor('urgent', this.value)" style="width: 44px; height: 32px; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; padding: 2px; background: white;">
+                    </div>
+                    <div class="settings-item">
+                        <div>
+                            <strong>Upcoming (&lt; 7 days)</strong>
+                            <div style="font-size: 11px; color: var(--text-light);">Due within a week</div>
+                        </div>
+                        <input type="color" id="urgencyColorUpcoming" value="#e65100" onchange="updateUrgencyColor('upcoming', this.value)" style="width: 44px; height: 32px; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; padding: 2px; background: white;">
+                    </div>
+                    <div class="settings-item">
+                        <div>
+                            <strong>Later (&gt; 7 days)</strong>
+                            <div style="font-size: 11px; color: var(--text-light);">Due in more than a week</div>
+                        </div>
+                        <input type="color" id="urgencyColorLater" value="#2e7d32" onchange="updateUrgencyColor('later', this.value)" style="width: 44px; height: 32px; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; padding: 2px; background: white;">
+                    </div>
+                    <div style="padding: 12px 0;">
+                        <button class="btn-secondary" style="width: 100%; padding: 10px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;" onclick="resetUrgencyColors()">↺ Reset Urgency Colors to Defaults</button>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>Survey & Feedback</h3>
+                    <div class="settings-item">
+                        <span>Student Requirement Survey</span>
+                        <a href="survey.html" style="color: var(--primary); text-decoration: none; font-weight: 600; font-size: 14px;">Open Survey →</a>
                     </div>
                 </div>
                 <div class="settings-section">

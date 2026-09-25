@@ -4,10 +4,16 @@ let appState = {
     isAdmin: false,
     notificationsEnabled: false,
     notificationsTime: 'morning',
+    currentView: 'feed', // 'feed' | 'deadlines'
+    deadlineColors: {
+        urgent: '#c62828',  // < 48 hours (Red)
+        upcoming: '#e65100', // < 7 days (Orange)
+        later: '#2e7d32'    // > 7 days (Green)
+    },
     notices: []
 };
 
-// ===== SAMPLE DATA (with dynamic current dates) =====
+// ===== SAMPLE DATA (with dynamic current dates covering all urgency tiers) =====
 function getSampleNotices() {
     const today = new Date();
     const formatDate = (daysAhead) => {
@@ -19,39 +25,48 @@ function getSampleNotices() {
     return [
         {
             id: 1,
-            title: 'Semester Exam Schedule Released',
-            content: 'The official exam schedule for this semester has been released. Please check the student portal for detailed information regarding exam dates, timings, and venues.',
+            title: 'Exam Hall Ticket Collection & Fee Verification',
+            content: 'All candidates must collect their stamped hall tickets from room 204. Ensure any remaining semester dues are cleared prior to the deadline.',
             date: formatDate(0),
-            deadline: formatDate(14),
+            deadline: formatDate(1), // < 48 hrs -> URGENT
             priority: 'high',
-            author: 'Academic Office'
+            author: 'Examination Cell'
         },
         {
             id: 2,
-            title: 'Library Extended Hours During Exams',
-            content: 'The library will remain open until 8:00 PM starting next week to support students preparing for upcoming examinations.',
+            title: 'Scholarship Application Verification Form',
+            content: 'Submit hard copies of income certificates and domicile documents for scholarship renewal at the administrative counter.',
             date: formatDate(-1),
-            deadline: null,
-            priority: 'medium',
-            author: 'Central Library'
-        },
-        {
-            id: 3,
-            title: 'Scholarship Application Deadline',
-            content: 'Final date to submit annual government and merit scholarship applications. Submit required documents through the college portal.',
-            date: formatDate(-2),
-            deadline: formatDate(10),
+            deadline: formatDate(4), // < 7 days -> UPCOMING
             priority: 'high',
             author: 'Financial Aid Office'
         },
         {
+            id: 3,
+            title: 'Final Year Project Documentation & Viva Registration',
+            content: 'Submission of synopsis, project documentation, and code repositories on GitHub for semester assessment and external viva.',
+            date: formatDate(-2),
+            deadline: formatDate(14), // > 7 days -> LATER
+            priority: 'medium',
+            author: 'Computer Science Dept'
+        },
+        {
             id: 4,
-            title: 'Campus Maintenance Work Notice',
-            content: 'Electrical and network maintenance will be conducted in Building C from 10:00 AM to 2:00 PM next Tuesday. Please plan accordingly.',
-            date: formatDate(-3),
-            deadline: null,
+            title: 'Library Overdue Book Return Drive',
+            content: 'Return overdue books without late fine penalty during the ongoing clearance drive before the semester examination.',
+            date: formatDate(-5),
+            deadline: formatDate(-1), // Past -> EXPIRED
             priority: 'low',
-            author: 'Facilities Management'
+            author: 'Central Library'
+        },
+        {
+            id: 5,
+            title: 'Campus Wi-Fi Maintenance & Upgrades',
+            content: 'The campus IT department will be upgrading core switches and access points this Saturday between 11:00 AM and 3:00 PM.',
+            date: formatDate(-3),
+            deadline: null, // Regular notice without deadline
+            priority: 'low',
+            author: 'IT Infrastructure'
         }
     ];
 }
@@ -82,17 +97,25 @@ function showToast(message) {
 function init() {
     loadState();
     loadNotices();
+    applyUrgencyColors();
     registerServiceWorker();
     setupPWAInstall();
     setupPullToRefresh();
     setupRouting();
 
-    // Check if user was previously logged in
+    // Check if user was previously logged in and set initial history state
     if (appState.user) {
         showScreen('homeScreen', false);
+        if (window.history && window.history.replaceState) {
+            window.history.replaceState({ screen: 'homeScreen' }, '', '#homeScreen');
+        }
         updateFAB();
+        switchView(appState.currentView || 'feed');
     } else {
         showScreen('loginScreen', false);
+        if (window.history && window.history.replaceState) {
+            window.history.replaceState({ screen: 'loginScreen' }, '', '#loginScreen');
+        }
     }
 }
 
@@ -100,13 +123,88 @@ function loadState() {
     try {
         const saved = localStorage.getItem('appState');
         if (saved) {
-            appState = { ...appState, ...JSON.parse(saved) };
+            const parsed = JSON.parse(saved);
+            appState = {
+                ...appState,
+                ...parsed,
+                deadlineColors: {
+                    ...appState.deadlineColors,
+                    ...(parsed.deadlineColors || {})
+                }
+            };
         } else {
             saveState();
         }
     } catch (e) {
         console.error('Failed to parse appState:', e);
     }
+}
+
+// ===== URGENCY COLORS & STYLES =====
+function hexToRgba(hex, alpha = 0.12) {
+    if (!hex || hex[0] !== '#') return `rgba(0,0,0,${alpha})`;
+    let c = hex.substring(1);
+    if (c.length === 3) {
+        c = c.split('').map(x => x + x).join('');
+    }
+    const num = parseInt(c, 16);
+    const r = (num >> 16) & 255;
+    const g = (num >> 8) & 255;
+    const b = num & 255;
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function applyUrgencyColors() {
+    const colors = appState.deadlineColors || {
+        urgent: '#c62828',
+        upcoming: '#e65100',
+        later: '#2e7d32'
+    };
+
+    const root = document.documentElement;
+    root.style.setProperty('--urgency-urgent', colors.urgent);
+    root.style.setProperty('--urgency-urgent-bg', hexToRgba(colors.urgent, 0.12));
+    root.style.setProperty('--urgency-upcoming', colors.upcoming);
+    root.style.setProperty('--urgency-upcoming-bg', hexToRgba(colors.upcoming, 0.12));
+    root.style.setProperty('--urgency-later', colors.later);
+    root.style.setProperty('--urgency-later-bg', hexToRgba(colors.later, 0.12));
+
+    const inputUrgent = document.getElementById('urgencyColorUrgent');
+    const inputUpcoming = document.getElementById('urgencyColorUpcoming');
+    const inputLater = document.getElementById('urgencyColorLater');
+
+    if (inputUrgent) inputUrgent.value = colors.urgent;
+    if (inputUpcoming) inputUpcoming.value = colors.upcoming;
+    if (inputLater) inputLater.value = colors.later;
+}
+
+function updateUrgencyColor(tier, hexValue) {
+    if (!appState.deadlineColors) {
+        appState.deadlineColors = { urgent: '#c62828', upcoming: '#e65100', later: '#2e7d32' };
+    }
+    appState.deadlineColors[tier] = hexValue;
+    saveState();
+    applyUrgencyColors();
+
+    if (appState.currentView === 'deadlines') {
+        renderDeadlines();
+    }
+    showToast(`Updated ${tier} urgency color`);
+}
+
+function resetUrgencyColors() {
+    appState.deadlineColors = {
+        urgent: '#c62828',
+        upcoming: '#e65100',
+        later: '#2e7d32'
+    };
+    saveState();
+    applyUrgencyColors();
+
+    if (appState.currentView === 'deadlines') {
+        renderDeadlines();
+    }
+    showToast('Reset urgency colors to default');
 }
 
 function saveState() {
@@ -180,6 +278,13 @@ function logout() {
 }
 
 // ===== SCREEN MANAGEMENT & HISTORY ROUTING =====
+function clearSearch() {
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput && searchInput.value !== '') {
+        searchInput.value = '';
+    }
+}
+
 function showScreen(screenId, pushHistory = true) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     const target = document.getElementById(screenId);
@@ -188,32 +293,86 @@ function showScreen(screenId, pushHistory = true) {
         target.scrollTop = 0;
     }
 
+    // Always clear search input when returning or navigating to homeScreen
+    if (screenId === 'homeScreen') {
+        clearSearch();
+    }
+
     if (pushHistory && window.history && window.history.pushState) {
-        window.history.pushState({ screen: screenId }, '', `#${screenId}`);
+        const currentState = window.history.state;
+        if (!currentState || currentState.screen !== screenId) {
+            window.history.pushState({ screen: screenId }, '', `#${screenId}`);
+        }
     }
 }
 
 function setupRouting() {
     window.addEventListener('popstate', (event) => {
-        if (event.state && event.state.screen) {
-            showScreen(event.state.screen, false);
-            if (event.state.screen === 'homeScreen') {
+        const targetScreen = event.state && event.state.screen 
+            ? event.state.screen 
+            : (appState.user ? 'homeScreen' : 'loginScreen');
+
+        // Transition without pushing redundant history
+        showScreen(targetScreen, false);
+
+        if (targetScreen === 'homeScreen') {
+            clearSearch();
+            if (appState.currentView === 'deadlines') {
+                renderDeadlines();
+            } else {
                 renderNotices();
             }
-        } else if (appState.user) {
-            showScreen('homeScreen', false);
-            renderNotices();
-        } else {
-            showScreen('loginScreen', false);
         }
     });
 }
 
 function goHome() {
+    clearSearch();
+    // Use history.back() if previous history entry is homeScreen to avoid inflating history stack
+    if (window.history.state && window.history.state.screen && window.history.state.screen !== 'homeScreen') {
+        window.history.back();
+    } else {
+        showScreen('homeScreen', true);
+        if (appState.currentView === 'deadlines') {
+            renderDeadlines();
+        } else {
+            renderNotices();
+        }
+    }
+}
+
+// ===== VIEW MODE SWITCHER =====
+function switchView(viewName) {
+    appState.currentView = viewName;
+    saveState();
+
+    const feedBtn = document.getElementById('viewFeedBtn');
+    const deadlinesBtn = document.getElementById('viewDeadlinesBtn');
+    const noticeList = document.getElementById('noticeList');
+    const deadlineTimeline = document.getElementById('deadlineTimeline');
     const searchInput = document.getElementById('searchInput');
-    if (searchInput) searchInput.value = '';
-    showScreen('homeScreen');
-    renderNotices();
+
+    if (viewName === 'deadlines') {
+        if (feedBtn) feedBtn.classList.remove('active');
+        if (deadlinesBtn) deadlinesBtn.classList.add('active');
+        if (noticeList) noticeList.style.display = 'none';
+        if (deadlineTimeline) deadlineTimeline.style.display = 'block';
+        if (searchInput) {
+            searchInput.placeholder = 'Search upcoming deadlines...';
+            searchInput.value = '';
+        }
+        renderDeadlines();
+    } else {
+        if (feedBtn) feedBtn.classList.add('active');
+        if (deadlinesBtn) deadlinesBtn.classList.remove('active');
+        if (noticeList) noticeList.style.display = 'block';
+        if (deadlineTimeline) deadlineTimeline.style.display = 'none';
+        if (searchInput) {
+            searchInput.placeholder = 'Search notices by title, content, or priority...';
+            searchInput.value = '';
+        }
+        renderNotices();
+    }
 }
 
 function openAdmin() {
@@ -221,10 +380,51 @@ function openAdmin() {
         showToast('Only administrators can post notices');
         return;
     }
+
+    const titleHeader = document.getElementById('adminScreenTitle');
+    const submitBtn = document.getElementById('adminSubmitBtn');
+    const noticeIdInput = document.getElementById('noticeId');
+
+    if (titleHeader) titleHeader.textContent = 'Post Notice';
+    if (submitBtn) submitBtn.textContent = 'Post Notice';
+    if (noticeIdInput) noticeIdInput.value = '';
+
     document.getElementById('noticeTitle').value = '';
     document.getElementById('noticeContent').value = '';
     document.getElementById('noticeDeadline').value = '';
     document.getElementById('noticePriority').value = 'medium';
+    showScreen('adminScreen');
+}
+
+function openEditNotice(id) {
+    if (!appState.isAdmin) {
+        showToast('Only administrators can edit notices');
+        return;
+    }
+
+    const notice = appState.notices.find(n => n.id === Number(id));
+    if (!notice) {
+        showToast('Notice not found');
+        return;
+    }
+
+    const titleHeader = document.getElementById('adminScreenTitle');
+    const submitBtn = document.getElementById('adminSubmitBtn');
+    const noticeIdInput = document.getElementById('noticeId');
+    const titleInput = document.getElementById('noticeTitle');
+    const contentInput = document.getElementById('noticeContent');
+    const deadlineInput = document.getElementById('noticeDeadline');
+    const priorityInput = document.getElementById('noticePriority');
+
+    if (titleHeader) titleHeader.textContent = 'Edit Notice';
+    if (submitBtn) submitBtn.textContent = 'Update Notice';
+    if (noticeIdInput) noticeIdInput.value = notice.id;
+
+    if (titleInput) titleInput.value = notice.title || '';
+    if (contentInput) contentInput.value = notice.content || '';
+    if (deadlineInput) deadlineInput.value = notice.deadline || '';
+    if (priorityInput) priorityInput.value = notice.priority || 'medium';
+
     showScreen('adminScreen');
 }
 
@@ -234,6 +434,7 @@ function openSettings() {
     if (notifSelect) {
         notifSelect.value = appState.notificationsTime || 'morning';
     }
+    applyUrgencyColors();
     showScreen('settingsScreen');
 }
 
@@ -313,13 +514,47 @@ function renderNotices(noticesToRender = appState.notices) {
         content.appendChild(title);
         content.appendChild(date);
 
+        const cardRight = document.createElement('div');
+        cardRight.className = 'card-right';
+
         const priority = document.createElement('span');
         const prio = (notice.priority || 'medium').toLowerCase();
         priority.className = `notice-priority priority-${prio}`;
         priority.textContent = (notice.priority || 'medium').toUpperCase();
+        cardRight.appendChild(priority);
+
+        // Admin Edit and Delete action buttons on card
+        if (appState.isAdmin) {
+            const adminActions = document.createElement('div');
+            adminActions.className = 'card-admin-actions';
+
+            const editBtn = document.createElement('button');
+            editBtn.className = 'btn-card-action btn-card-edit';
+            editBtn.textContent = '✏️ Edit';
+            editBtn.title = 'Edit Notice';
+            editBtn.setAttribute('aria-label', `Edit Notice: ${notice.title}`);
+            editBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openEditNotice(notice.id);
+            });
+            adminActions.appendChild(editBtn);
+
+            const delBtn = document.createElement('button');
+            delBtn.className = 'btn-card-action btn-card-delete';
+            delBtn.textContent = '🗑️ Delete';
+            delBtn.title = 'Delete Notice';
+            delBtn.setAttribute('aria-label', `Delete Notice: ${notice.title}`);
+            delBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                deleteNotice(notice.id);
+            });
+            adminActions.appendChild(delBtn);
+
+            cardRight.appendChild(adminActions);
+        }
 
         card.appendChild(content);
-        card.appendChild(priority);
+        card.appendChild(cardRight);
 
         fragment.appendChild(card);
     });
@@ -399,8 +634,17 @@ function viewNotice(id) {
     });
     actions.appendChild(remindBtn);
 
-    // Admin delete button using addEventListener
+    // Admin Edit and Delete action buttons using addEventListener
     if (appState.isAdmin) {
+        const editBtn = document.createElement('button');
+        editBtn.className = 'btn-edit';
+        editBtn.textContent = '✏️ Edit Notice';
+        editBtn.setAttribute('aria-label', 'Edit Notice');
+        editBtn.addEventListener('click', () => {
+            openEditNotice(notice.id);
+        });
+        actions.appendChild(editBtn);
+
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'btn-delete';
         deleteBtn.textContent = '🗑️ Delete Notice';
@@ -421,31 +665,272 @@ function filterNotices() {
     const input = document.getElementById('searchInput');
     const query = input ? input.value.trim().toLowerCase() : '';
 
-    if (!query) {
-        renderNotices(appState.notices);
+    if (appState.currentView === 'deadlines') {
+        if (!query) {
+            renderDeadlines();
+            return;
+        }
+        const filtered = appState.notices.filter(notice =>
+            notice.deadline && (
+                (notice.title && notice.title.toLowerCase().includes(query)) ||
+                (notice.content && notice.content.toLowerCase().includes(query)) ||
+                (notice.priority && notice.priority.toLowerCase().includes(query)) ||
+                (notice.deadline && notice.deadline.toLowerCase().includes(query))
+            )
+        );
+        renderDeadlines(filtered);
+    } else {
+        if (!query) {
+            renderNotices(appState.notices);
+            return;
+        }
+        const filtered = appState.notices.filter(notice =>
+            (notice.title && notice.title.toLowerCase().includes(query)) ||
+            (notice.content && notice.content.toLowerCase().includes(query)) ||
+            (notice.priority && notice.priority.toLowerCase().includes(query))
+        );
+        renderNotices(filtered);
+    }
+}
+
+// ===== DEADLINE TIMELINE VIEW =====
+function renderDeadlines(deadlinesToRender = null) {
+    const timeline = document.getElementById('deadlineTimeline');
+    if (!timeline) return;
+
+    // Securely clear previous children without innerHTML
+    while (timeline.firstChild) {
+        timeline.removeChild(timeline.firstChild);
+    }
+
+    const noticesWithDeadlines = (deadlinesToRender !== null ? deadlinesToRender : appState.notices)
+        .filter(n => n.deadline);
+
+    if (noticesWithDeadlines.length === 0) {
+        const emptyState = document.createElement('div');
+        emptyState.className = 'empty-state';
+
+        const icon = document.createElement('div');
+        icon.className = 'empty-state-icon';
+        icon.textContent = '📅';
+
+        const msg = document.createElement('p');
+        msg.textContent = 'No upcoming deadlines found';
+
+        emptyState.appendChild(icon);
+        emptyState.appendChild(msg);
+        timeline.appendChild(emptyState);
         return;
     }
 
-    const filtered = appState.notices.filter(notice =>
-        (notice.title && notice.title.toLowerCase().includes(query)) ||
-        (notice.content && notice.content.toLowerCase().includes(query)) ||
-        (notice.priority && notice.priority.toLowerCase().includes(query))
-    );
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-    renderNotices(filtered);
+    const enriched = noticesWithDeadlines.map(notice => {
+        const deadlineDate = new Date(notice.deadline);
+        deadlineDate.setHours(23, 59, 59, 999);
+        const diffMs = deadlineDate.getTime() - today.getTime();
+        const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+        let tier = 'later';
+        let urgencyLabel = '';
+        let badgeIcon = '⏳';
+
+        if (diffDays < 0) {
+            tier = 'expired';
+            urgencyLabel = 'Deadline Passed';
+            badgeIcon = '⚠️';
+        } else if (diffDays === 0) {
+            tier = 'urgent';
+            urgencyLabel = 'Due Today';
+            badgeIcon = '🚨';
+        } else if (diffDays === 1) {
+            tier = 'urgent';
+            urgencyLabel = 'Due Tomorrow (< 24h)';
+            badgeIcon = '🚨';
+        } else if (diffDays <= 2) {
+            tier = 'urgent';
+            urgencyLabel = `Due in ${diffDays} days (< 48h)`;
+            badgeIcon = '🚨';
+        } else if (diffDays <= 7) {
+            tier = 'upcoming';
+            urgencyLabel = `Due in ${diffDays} days (< 7d)`;
+            badgeIcon = '⏰';
+        } else {
+            tier = 'later';
+            const weeks = Math.round(diffDays / 7);
+            urgencyLabel = `Due in ${diffDays} days (${weeks} ${weeks === 1 ? 'wk' : 'wks'})`;
+            badgeIcon = '⏳';
+        }
+
+        return {
+            notice,
+            diffDays,
+            tier,
+            urgencyLabel,
+            badgeIcon,
+            formattedDate: deadlineDate.toLocaleDateString('en-GB', {
+                weekday: 'short',
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric'
+            })
+        };
+    });
+
+    // Chronological sorting: upcoming nearest first (0, 1, 2, ...), expired last
+    enriched.sort((a, b) => {
+        if (a.diffDays >= 0 && b.diffDays >= 0) return a.diffDays - b.diffDays;
+        if (a.diffDays >= 0 && b.diffDays < 0) return -1;
+        if (a.diffDays < 0 && b.diffDays >= 0) return 1;
+        return b.diffDays - a.diffDays;
+    });
+
+    // Summary count bar
+    const urgentCount = enriched.filter(e => e.tier === 'urgent').length;
+    const upcomingCount = enriched.filter(e => e.tier === 'upcoming').length;
+    const laterCount = enriched.filter(e => e.tier === 'later').length;
+
+    const summaryBar = document.createElement('div');
+    summaryBar.className = 'timeline-summary';
+
+    if (urgentCount > 0) {
+        const chip = document.createElement('div');
+        chip.className = 'timeline-summary-chip urgent';
+        chip.textContent = `🚨 ${urgentCount} Urgent (<48h)`;
+        summaryBar.appendChild(chip);
+    }
+    if (upcomingCount > 0) {
+        const chip = document.createElement('div');
+        chip.className = 'timeline-summary-chip upcoming';
+        chip.textContent = `⏰ ${upcomingCount} Upcoming (<7d)`;
+        summaryBar.appendChild(chip);
+    }
+    if (laterCount > 0) {
+        const chip = document.createElement('div');
+        chip.className = 'timeline-summary-chip later';
+        chip.textContent = `⏳ ${laterCount} Later (>7d)`;
+        summaryBar.appendChild(chip);
+    }
+
+    timeline.appendChild(summaryBar);
+
+    // Timeline cards fragment
+    const fragment = document.createDocumentFragment();
+
+    enriched.forEach(item => {
+        const card = document.createElement('div');
+        card.className = `timeline-card tier-${item.tier}`;
+        card.setAttribute('role', 'button');
+        card.setAttribute('tabindex', '0');
+        card.setAttribute('aria-label', `Deadline: ${item.notice.title}, ${item.urgencyLabel}`);
+
+        card.addEventListener('click', () => {
+            viewNotice(item.notice.id);
+        });
+
+        card.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                viewNotice(item.notice.id);
+            }
+        });
+
+        // Header: Urgency badge & Date chip
+        const header = document.createElement('div');
+        header.className = 'timeline-header';
+
+        const badge = document.createElement('span');
+        badge.className = `urgency-badge ${item.tier}`;
+        badge.textContent = `${item.badgeIcon} ${item.urgencyLabel}`;
+
+        const dateChip = document.createElement('span');
+        dateChip.className = 'timeline-date-chip';
+        dateChip.textContent = `📅 ${item.formattedDate}`;
+
+        header.appendChild(badge);
+        header.appendChild(dateChip);
+        card.appendChild(header);
+
+        // Title
+        const title = document.createElement('div');
+        title.className = 'timeline-title';
+        title.textContent = item.notice.title;
+        card.appendChild(title);
+
+        // Excerpt
+        const desc = document.createElement('div');
+        desc.className = 'timeline-desc';
+        desc.textContent = item.notice.content;
+        card.appendChild(desc);
+
+        // Footer with priority tag and action buttons
+        const footer = document.createElement('div');
+        footer.className = 'timeline-footer';
+
+        const prioSpan = document.createElement('span');
+        const prio = (item.notice.priority || 'medium').toLowerCase();
+        prioSpan.className = `notice-priority priority-${prio}`;
+        prioSpan.textContent = (item.notice.priority || 'medium').toUpperCase();
+        footer.appendChild(prioSpan);
+
+        const actions = document.createElement('div');
+        actions.className = 'timeline-actions';
+
+        const viewBtn = document.createElement('button');
+        viewBtn.className = 'btn-timeline-action';
+        viewBtn.textContent = '👁️ Details';
+        viewBtn.setAttribute('aria-label', 'View details');
+        viewBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            viewNotice(item.notice.id);
+        });
+        actions.appendChild(viewBtn);
+
+        const remindBtn = document.createElement('button');
+        remindBtn.className = 'btn-timeline-action';
+        remindBtn.textContent = '⏰ Remind';
+        remindBtn.setAttribute('aria-label', 'Remind me');
+        remindBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            addReminder(item.notice.id);
+        });
+        actions.appendChild(remindBtn);
+
+        if (appState.isAdmin) {
+            const editBtn = document.createElement('button');
+            editBtn.className = 'btn-timeline-action';
+            editBtn.textContent = '✏️ Edit';
+            editBtn.setAttribute('aria-label', 'Edit notice');
+            editBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openEditNotice(item.notice.id);
+            });
+            actions.appendChild(editBtn);
+        }
+
+        footer.appendChild(actions);
+        card.appendChild(footer);
+
+        fragment.appendChild(card);
+    });
+
+    timeline.appendChild(fragment);
 }
 
 function submitNotice() {
     if (!appState.isAdmin) {
-        showToast('Unauthorized: Only admins can post notices');
+        showToast('Unauthorized: Only admins can manage notices');
         return;
     }
 
+    const noticeIdInput = document.getElementById('noticeId');
     const titleInput = document.getElementById('noticeTitle');
     const contentInput = document.getElementById('noticeContent');
     const deadlineInput = document.getElementById('noticeDeadline');
     const priorityInput = document.getElementById('noticePriority');
 
+    const editId = noticeIdInput && noticeIdInput.value ? Number(noticeIdInput.value) : null;
     const title = titleInput ? titleInput.value.trim() : '';
     const content = contentInput ? contentInput.value.trim() : '';
     const deadline = deadlineInput ? deadlineInput.value : '';
@@ -456,25 +941,44 @@ function submitNotice() {
         return;
     }
 
-    const maxId = appState.notices.reduce((max, n) => Math.max(max, Number(n.id) || 0), 0);
-    const authorName = appState.user && appState.user.username ? appState.user.username : 'Admin';
+    if (editId) {
+        // UPDATE existing notice
+        const index = appState.notices.findIndex(n => n.id === editId);
+        if (index === -1) {
+            showToast('Notice to update was not found');
+            return;
+        }
 
-    const newNotice = {
-        id: maxId + 1,
-        title,
-        content,
-        date: new Date().toISOString().split('T')[0],
-        deadline: deadline || null,
-        priority,
-        author: authorName
-    };
+        appState.notices[index].title = title;
+        appState.notices[index].content = content;
+        appState.notices[index].deadline = deadline || null;
+        appState.notices[index].priority = priority;
 
-    appState.notices.unshift(newNotice);
-    saveNotices();
+        saveNotices();
+        showToast('Notice updated successfully!');
+        goHome();
+    } else {
+        // CREATE new notice
+        const maxId = appState.notices.reduce((max, n) => Math.max(max, Number(n.id) || 0), 0);
+        const authorName = appState.user && appState.user.username ? appState.user.username : 'Admin';
 
-    showToast('Notice posted successfully!');
-    sendNotification(title);
-    goHome();
+        const newNotice = {
+            id: maxId + 1,
+            title,
+            content,
+            date: new Date().toISOString().split('T')[0],
+            deadline: deadline || null,
+            priority,
+            author: authorName
+        };
+
+        appState.notices.unshift(newNotice);
+        saveNotices();
+
+        showToast('Notice posted successfully!');
+        sendNotification(title);
+        goHome();
+    }
 }
 
 function deleteNotice(id) {
@@ -483,7 +987,10 @@ function deleteNotice(id) {
         return;
     }
 
-    if (confirm('Are you sure you want to delete this notice?')) {
+    const notice = appState.notices.find(n => n.id === Number(id));
+    const noticeTitle = notice ? `"${notice.title}"` : 'this notice';
+
+    if (confirm(`Are you sure you want to delete ${noticeTitle}?`)) {
         appState.notices = appState.notices.filter(n => n.id !== Number(id));
         saveNotices();
         showToast('Notice deleted successfully');
@@ -640,24 +1147,42 @@ function promptInstallApp() {
 // ===== PULL TO REFRESH =====
 function setupPullToRefresh() {
     let startY = 0;
-    const list = document.getElementById('noticeList');
+    let canPull = false;
 
-    document.addEventListener('touchstart', e => {
-        if (e.touches.length === 1) {
+    document.addEventListener('touchstart', (e) => {
+        const homeScreen = document.getElementById('homeScreen');
+        const list = document.getElementById('noticeList');
+        const isHomeActive = homeScreen && homeScreen.classList.contains('active');
+
+        // Strictly verify window.scrollY === 0 and container is at top
+        const isWindowAtTop = (window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0) === 0;
+        const isListAtTop = (!list || list.scrollTop <= 0) && (!homeScreen || homeScreen.scrollTop <= 0);
+
+        if (isHomeActive && isWindowAtTop && isListAtTop && e.touches.length === 1) {
             startY = e.touches[0].clientY;
+            canPull = true;
+        } else {
+            canPull = false;
         }
     }, { passive: true });
 
-    document.addEventListener('touchend', e => {
+    document.addEventListener('touchend', (e) => {
+        if (!canPull) return;
+        canPull = false;
+
         const homeScreen = document.getElementById('homeScreen');
         if (!homeScreen || !homeScreen.classList.contains('active')) return;
 
-        // Ensure user is at the top of the page/list before triggering pull-to-refresh
-        const isAtTop = window.scrollY <= 5 && (!list || list.scrollTop <= 5);
-        const touchEndY = e.changedTouches[0].clientY;
+        // Strictly verify window.scrollY is still 0 at end of gesture
+        const currentWindowScrollY = window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0;
+        if (currentWindowScrollY !== 0) return;
 
-        if (isAtTop && (touchEndY - startY) > 90) {
+        const touchEndY = e.changedTouches[0].clientY;
+        const pullDistance = touchEndY - startY;
+
+        if (pullDistance > 80) {
             loadNotices();
+            clearSearch();
             showToast('Refreshed notice feed');
         }
     }, { passive: true });
