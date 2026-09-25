@@ -83,6 +83,7 @@ function init() {
     loadState();
     loadNotices();
     registerServiceWorker();
+    setupPWAInstall();
     setupPullToRefresh();
     setupRouting();
 
@@ -467,19 +468,68 @@ function sendNotification(title) {
     }
 }
 
-// ===== SERVICE WORKER REGISTRATION =====
+// ===== PWA INSTALLATION & SERVICE WORKER =====
+let deferredInstallPrompt = null;
+
 function registerServiceWorker() {
     if ('serviceWorker' in navigator && (window.location.protocol === 'http:' || window.location.protocol === 'https:')) {
-        window.addEventListener('load', () => {
+        const performRegistration = () => {
             navigator.serviceWorker.register('./sw.js')
-                .then(reg => {
-                    console.log('Service Worker registered successfully with scope:', reg.scope);
+                .then(registration => {
+                    console.log('Service Worker registered successfully with scope:', registration.scope);
+                    registration.update().catch(() => {});
                 })
                 .catch(err => {
                     console.warn('Service Worker registration skipped or failed:', err);
                 });
-        });
+        };
+
+        if (document.readyState === 'complete') {
+            performRegistration();
+        } else {
+            window.addEventListener('load', performRegistration);
+        }
     }
+}
+
+function setupPWAInstall() {
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredInstallPrompt = e;
+
+        const installBtn = document.getElementById('installBtn');
+        if (installBtn) {
+            installBtn.style.display = 'flex';
+        }
+    });
+
+    window.addEventListener('appinstalled', () => {
+        deferredInstallPrompt = null;
+        const installBtn = document.getElementById('installBtn');
+        if (installBtn) {
+            installBtn.style.display = 'none';
+        }
+        showToast('App installed successfully!');
+    });
+}
+
+function promptInstallApp() {
+    if (!deferredInstallPrompt) {
+        showToast('App is already installed or browser installation not triggered yet.');
+        return;
+    }
+
+    deferredInstallPrompt.prompt();
+    deferredInstallPrompt.userChoice.then((choiceResult) => {
+        if (choiceResult.outcome === 'accepted') {
+            console.log('User accepted the install prompt');
+        }
+        deferredInstallPrompt = null;
+        const installBtn = document.getElementById('installBtn');
+        if (installBtn) {
+            installBtn.style.display = 'none';
+        }
+    });
 }
 
 // ===== PULL TO REFRESH =====

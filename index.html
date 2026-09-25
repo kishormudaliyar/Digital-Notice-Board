@@ -38,8 +38,9 @@
             <header class="header">
                 <h1>Notices</h1>
                 <div class="header-icons">
-                    <button aria-label="Settings" onclick="openSettings()">⚙️</button>
-                    <button aria-label="Logout" onclick="logout()">👤</button>
+                    <button id="installBtn" style="display: none;" aria-label="Install App" title="Install App as PWA" onclick="promptInstallApp()">📥</button>
+                    <button aria-label="Settings" title="Settings" onclick="openSettings()">⚙️</button>
+                    <button aria-label="Logout" title="Logout" onclick="logout()">👤</button>
                 </div>
             </header>
             <div class="search-container">
