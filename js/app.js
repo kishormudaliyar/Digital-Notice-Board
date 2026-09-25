@@ -252,27 +252,79 @@ function renderNotices(noticesToRender = appState.notices) {
     const list = document.getElementById('noticeList');
     if (!list) return;
 
+    // Securely clear previous children without innerHTML
+    while (list.firstChild) {
+        list.removeChild(list.firstChild);
+    }
+
     if (!noticesToRender || noticesToRender.length === 0) {
-        list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><p>No notices found</p></div>';
+        const emptyState = document.createElement('div');
+        emptyState.className = 'empty-state';
+
+        const icon = document.createElement('div');
+        icon.className = 'empty-state-icon';
+        icon.textContent = '📭';
+
+        const msg = document.createElement('p');
+        msg.textContent = 'No notices found';
+
+        emptyState.appendChild(icon);
+        emptyState.appendChild(msg);
+        list.appendChild(emptyState);
         return;
     }
 
-    list.innerHTML = noticesToRender.map(notice => {
-        const safeTitle = escapeHTML(notice.title);
-        const safeDate = escapeHTML(notice.date);
-        const safeDeadline = notice.deadline ? ` • Deadline: ${escapeHTML(notice.deadline)}` : '';
-        const safePriority = escapeHTML(notice.priority || 'medium');
+    const fragment = document.createDocumentFragment();
 
-        return `
-            <div class="notice-card" onclick="viewNotice(${Number(notice.id)})">
-                <div class="notice-content">
-                    <div class="notice-title">${safeTitle}</div>
-                    <div class="notice-date">📅 ${safeDate}${safeDeadline}</div>
-                </div>
-                <span class="notice-priority priority-${safePriority}">${safePriority.toUpperCase()}</span>
-            </div>
-        `;
-    }).join('');
+    noticesToRender.forEach(notice => {
+        const card = document.createElement('div');
+        card.className = 'notice-card';
+        card.setAttribute('role', 'button');
+        card.setAttribute('tabindex', '0');
+        card.setAttribute('aria-label', `Notice: ${notice.title}`);
+
+        // Safe event listener referencing notice ID
+        card.addEventListener('click', () => {
+            viewNotice(notice.id);
+        });
+
+        card.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                viewNotice(notice.id);
+            }
+        });
+
+        const content = document.createElement('div');
+        content.className = 'notice-content';
+
+        const title = document.createElement('div');
+        title.className = 'notice-title';
+        title.textContent = notice.title;
+
+        const date = document.createElement('div');
+        date.className = 'notice-date';
+        let dateInfo = `📅 ${notice.date}`;
+        if (notice.deadline) {
+            dateInfo += ` • Deadline: ${notice.deadline}`;
+        }
+        date.textContent = dateInfo;
+
+        content.appendChild(title);
+        content.appendChild(date);
+
+        const priority = document.createElement('span');
+        const prio = (notice.priority || 'medium').toLowerCase();
+        priority.className = `notice-priority priority-${prio}`;
+        priority.textContent = (notice.priority || 'medium').toUpperCase();
+
+        card.appendChild(content);
+        card.appendChild(priority);
+
+        fragment.appendChild(card);
+    });
+
+    list.appendChild(fragment);
 }
 
 function viewNotice(id) {
@@ -282,32 +334,85 @@ function viewNotice(id) {
     const detail = document.getElementById('noticeDetail');
     if (!detail) return;
 
-    const safeTitle = escapeHTML(notice.title);
-    const safeContent = escapeHTML(notice.content);
-    const safeDate = escapeHTML(notice.date);
-    const safeAuthor = escapeHTML(notice.author || 'Admin');
-    const safeDeadline = notice.deadline ? escapeHTML(notice.deadline) : null;
+    // Securely clear previous children without innerHTML
+    while (detail.firstChild) {
+        detail.removeChild(detail.firstChild);
+    }
 
-    const deleteBtn = appState.isAdmin ? `
-        <button class="btn-delete" onclick="deleteNotice(${notice.id})">🗑️ Delete Notice</button>
-    ` : '';
+    const container = document.createElement('div');
+    container.className = 'notice-detail';
 
-    detail.innerHTML = `
-        <div class="notice-detail">
-            <h2>${safeTitle}</h2>
-            <div class="notice-meta">
-                <span>📅 ${safeDate}</span>
-                <span>✍️ ${safeAuthor}</span>
-            </div>
-            <div class="notice-body">${safeContent}</div>
-            ${safeDeadline ? `<div class="notice-deadline-box"><strong>⏰ Deadline:</strong> ${safeDeadline}</div>` : ''}
-            <div class="notice-actions">
-                <button onclick="shareNotice(${notice.id})">🔗 Share</button>
-                <button onclick="addReminder(${notice.id})">⏰ Remind Me</button>
-                ${deleteBtn}
-            </div>
-        </div>
-    `;
+    const h2 = document.createElement('h2');
+    h2.textContent = notice.title;
+    container.appendChild(h2);
+
+    const meta = document.createElement('div');
+    meta.className = 'notice-meta';
+
+    const dateSpan = document.createElement('span');
+    dateSpan.textContent = `📅 ${notice.date}`;
+    meta.appendChild(dateSpan);
+
+    const authorSpan = document.createElement('span');
+    authorSpan.textContent = `✍️ ${notice.author || 'Admin'}`;
+    meta.appendChild(authorSpan);
+
+    container.appendChild(meta);
+
+    const body = document.createElement('div');
+    body.className = 'notice-body';
+    body.textContent = notice.content;
+    container.appendChild(body);
+
+    if (notice.deadline) {
+        const deadlineBox = document.createElement('div');
+        deadlineBox.className = 'notice-deadline-box';
+
+        const deadlineLabel = document.createElement('strong');
+        deadlineLabel.textContent = '⏰ Deadline: ';
+        deadlineBox.appendChild(deadlineLabel);
+
+        const deadlineVal = document.createTextNode(notice.deadline);
+        deadlineBox.appendChild(deadlineVal);
+
+        container.appendChild(deadlineBox);
+    }
+
+    const actions = document.createElement('div');
+    actions.className = 'notice-actions';
+
+    // Share button using addEventListener and notice ID
+    const shareBtn = document.createElement('button');
+    shareBtn.textContent = '🔗 Share';
+    shareBtn.setAttribute('aria-label', 'Share Notice');
+    shareBtn.addEventListener('click', () => {
+        shareNotice(notice.id);
+    });
+    actions.appendChild(shareBtn);
+
+    // Remind Me button using addEventListener
+    const remindBtn = document.createElement('button');
+    remindBtn.textContent = '⏰ Remind Me';
+    remindBtn.setAttribute('aria-label', 'Remind Me');
+    remindBtn.addEventListener('click', () => {
+        addReminder(notice.id);
+    });
+    actions.appendChild(remindBtn);
+
+    // Admin delete button using addEventListener
+    if (appState.isAdmin) {
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'btn-delete';
+        deleteBtn.textContent = '🗑️ Delete Notice';
+        deleteBtn.setAttribute('aria-label', 'Delete Notice');
+        deleteBtn.addEventListener('click', () => {
+            deleteNotice(notice.id);
+        });
+        actions.appendChild(deleteBtn);
+    }
+
+    container.appendChild(actions);
+    detail.appendChild(container);
 
     showScreen('detailScreen');
 }
