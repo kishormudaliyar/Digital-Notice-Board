@@ -1,3 +1,9 @@
+/**
+ * Digital Notice Board - Enterprise Application Script
+ * Theme: Minimal, Clean, Professional (Dark Navy #1a3a52, Accent Teal #00acc1)
+ * Standard: 100% Vanilla ES6+, Strict DOM manipulation, Zero emojis
+ */
+
 // ===== APP STATE =====
 let appState = {
     user: null,
@@ -5,16 +11,30 @@ let appState = {
     notificationsEnabled: false,
     notificationsTime: 'morning',
     currentView: 'feed', // 'feed' | 'deadlines'
+    activeCategory: 'All', // 'All' | 'Academic' | 'Events' | 'Deadlines' | 'Admin'
+    activeSettingsTab: 'notifications', // 'notifications' | 'preferences' | 'about'
     activeReminderNoticeId: null,
+    savedNotices: [], // Array of bookmarked notice IDs
+    archivedNotices: [], // Array of archived notice IDs
     deadlineColors: {
-        urgent: '#c62828',  // < 48 hours (Red)
-        upcoming: '#e65100', // < 7 days (Orange)
-        later: '#2e7d32'    // > 7 days (Green)
+        urgent: '#c62828',   // < 48 hours
+        upcoming: '#e65100', // < 7 days
+        later: '#2e7d32'     // > 7 days
     },
     notices: []
 };
 
-// ===== SAMPLE DATA (with dynamic current dates covering all urgency tiers & attachments) =====
+// Current attachment in admin form
+let currentAdminAttachment = null;
+
+// PWA deferred install prompt
+let deferredPrompt = null;
+
+// Pull to refresh tracking
+let touchStartY = 0;
+let touchEndY = 0;
+
+// ===== SAMPLE DATA =====
 function getSampleNotices() {
     const today = new Date();
     const formatDate = (daysAhead) => {
@@ -27,7 +47,8 @@ function getSampleNotices() {
         {
             id: 1,
             title: 'Exam Hall Ticket Collection & Fee Verification',
-            content: 'All candidates must collect their stamped hall tickets from room 204. Ensure any remaining semester dues are cleared prior to the deadline.',
+            category: 'Academic',
+            content: 'All candidates appearing for the semester examinations must collect their stamped hall tickets from Room 204. Ensure that any remaining semester dues are verified prior to the clearance deadline.\n\nRequired Verification Items:\n- College Identity Card\n- Fee Payment Acknowledgment Slip\n- Two passport size photographs',
             date: formatDate(0),
             deadline: formatDate(1), // < 48 hrs -> URGENT
             priority: 'high',
@@ -41,8 +62,9 @@ function getSampleNotices() {
         },
         {
             id: 2,
-            title: 'Scholarship Application Verification Form',
-            content: 'Submit hard copies of income certificates and domicile documents for scholarship renewal at the administrative counter.',
+            title: 'Government Scholarship Application Verification',
+            category: 'Admin',
+            content: 'Eligible reserved category and merit-cum-means scholarship applicants must submit their hard copies of domicile certificates, income declarations, and caste validity documents at Administrative Counter 3.\n\nIncomplete applications will be disqualified by the Social Welfare Department.',
             date: formatDate(-1),
             deadline: formatDate(4), // < 7 days -> UPCOMING
             priority: 'high',
@@ -50,8 +72,9 @@ function getSampleNotices() {
         },
         {
             id: 3,
-            title: 'Final Year Project Documentation & Viva Registration',
-            content: 'Submission of synopsis, project documentation, and code repositories on GitHub for semester assessment and external viva.',
+            title: 'Final Year Project Documentation & External Viva',
+            category: 'Academic',
+            content: 'Submission of the project synopsis, GitHub repository links, and IEEE formatted project reports for the semester external examination.\n\nViva Voce will be conducted in Computer Science Laboratories 1 and 2 by University appointed examiners.',
             date: formatDate(-2),
             deadline: formatDate(14), // > 7 days -> LATER
             priority: 'medium',
@@ -60,36 +83,65 @@ function getSampleNotices() {
                 name: 'FYCS_Project_Viva_Schedule_Timetable.png',
                 type: 'image/svg+xml',
                 size: 18432,
-                data: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="340" viewBox="0 0 600 340"><rect width="100%" height="100%" fill="%23f8f9fa"/><rect x="20" y="20" width="560" height="50" rx="8" fill="%23003D82"/><text x="300" y="52" fill="white" font-family="sans-serif" font-size="18" font-weight="bold" text-anchor="middle">FYCS Project Viva Schedule 2026</text><rect x="20" y="85" width="560" height="235" rx="8" fill="white" stroke="%23DCDCDC"/><text x="40" y="125" fill="%23333" font-family="sans-serif" font-size="14" font-weight="bold">Batch 1 (Roll 101 - 130): 09:30 AM - Lab 1</text><text x="40" y="165" fill="%23333" font-family="sans-serif" font-size="14" font-weight="bold">Batch 2 (Roll 131 - 160): 11:30 AM - Lab 1</text><text x="40" y="205" fill="%23333" font-family="sans-serif" font-size="14" font-weight="bold">Batch 3 (Roll 161 - 190): 01:30 PM - Lab 2</text><text x="40" y="250" fill="%23666" font-family="sans-serif" font-size="13">Requirements: Printed synopsis, GitHub link, ID card</text><text x="40" y="290" fill="%23e65100" font-family="sans-serif" font-size="13" font-weight="bold">External Examiner: University of Mumbai</text></svg>'
+                data: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="340" viewBox="0 0 600 340"><rect width="100%" height="100%" fill="%23f8fafc"/><rect x="20" y="20" width="560" height="50" rx="6" fill="%231a3a52"/><text x="300" y="52" fill="white" font-family="sans-serif" font-size="16" font-weight="bold" text-anchor="middle">FYCS Project Viva Schedule 2026</text><rect x="20" y="85" width="560" height="235" rx="6" fill="white" stroke="%23e2e8f0"/><text x="40" y="125" fill="%230f172a" font-family="sans-serif" font-size="13" font-weight="bold">Batch 1 (Roll 101 - 130): 09:30 AM - Lab 1</text><text x="40" y="165" fill="%230f172a" font-family="sans-serif" font-size="13" font-weight="bold">Batch 2 (Roll 131 - 160): 11:30 AM - Lab 1</text><text x="40" y="205" fill="%230f172a" font-family="sans-serif" font-size="13" font-weight="bold">Batch 3 (Roll 161 - 190): 01:30 PM - Lab 2</text><text x="40" y="250" fill="%2364748b" font-family="sans-serif" font-size="12">Requirements: Spiral-bound report, GitHub repository link, College ID</text><text x="40" y="290" fill="%2300acc1" font-family="sans-serif" font-size="12" font-weight="bold">University of Mumbai Appointed External Examiners</text></svg>'
             }
         },
         {
             id: 4,
-            title: 'Library Overdue Book Return Drive',
-            content: 'Return overdue books without late fine penalty during the ongoing clearance drive before the semester examination.',
+            title: 'Annual Tech Symposium: Hack-Sonawane 2026',
+            category: 'Events',
+            content: 'Registrations are now open for the 24-hour inter-collegiate coding hackathon. Themes include AI for Social Good, Urban Transportation, and Cyber Resilience.\n\nCash prizes, mentorship sessions, and industry internships for winning teams.',
+            date: formatDate(-3),
+            deadline: formatDate(6),
+            priority: 'medium',
+            author: 'Student Council'
+        },
+        {
+            id: 5,
+            title: 'Central Library Overdue Clearance Drive',
+            category: 'Admin',
+            content: 'Return overdue books without fine penalty during the ongoing clearance week before semester examination hall ticket distribution.',
             date: formatDate(-5),
             deadline: formatDate(-1), // Past -> EXPIRED
             priority: 'low',
             author: 'Central Library'
         },
         {
-            id: 5,
-            title: 'Campus Wi-Fi Maintenance & Upgrades',
-            content: 'The campus IT department will be upgrading core switches and access points this Saturday between 11:00 AM and 3:00 PM.',
-            date: formatDate(-3),
-            deadline: null, // Regular notice without deadline
+            id: 6,
+            title: 'Campus IT Network Maintenance & Wi-Fi Upgrades',
+            category: 'Admin',
+            content: 'The campus IT department will be upgrading core switches and campus Wi-Fi access points this Saturday between 11:00 AM and 03:00 PM. Periodic downtime may occur.',
+            date: formatDate(-4),
+            deadline: null,
             priority: 'low',
-            author: 'IT Infrastructure'
+            author: 'IT Operations'
         }
     ];
 }
 
+// ===== SVG ICONS HELPERS (Zero Emojis) =====
+const SVG_ICONS = {
+    calendar: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`,
+    clock: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`,
+    user: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>`,
+    paperclip: `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>`,
+    share: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>`,
+    bookmark: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>`,
+    archive: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>`,
+    edit: `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`,
+    trash: `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`,
+    download: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>`,
+    check: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
+    eye: `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`,
+    arrowRight: `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>`
+};
+
 // ===== UTILITIES =====
 function formatBytes(bytes, decimals = 1) {
-    if (!bytes || bytes === 0) return '0 Bytes';
+    if (!bytes || bytes === 0) return '0 B';
     const k = 1024;
     const dm = decimals < 0 ? 0 : decimals;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const sizes = ['B', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
@@ -123,7 +175,6 @@ function openAttachmentViewer(attachment) {
         window.open(blobUrl, '_blank');
         setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
     } catch (e) {
-        console.error('Error opening attachment blob:', e);
         window.open(attachment.data, '_blank');
     }
 }
@@ -143,38 +194,34 @@ function downloadAttachment(attachment) {
         a.click();
         document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-        showToast(`Downloading ${attachment.name || 'document'}...`);
+        showToast(`Downloading ${attachment.name || 'document'}`);
     } catch (e) {
-        console.error('Error downloading attachment:', e);
         const a = document.createElement('a');
         a.href = attachment.data;
         a.download = attachment.name || 'document';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        showToast(`Downloading ${attachment.name || 'document'}...`);
+        showToast(`Downloading ${attachment.name || 'document'}`);
     }
-}
-
-function escapeHTML(str) {
-    if (!str) return '';
-    return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
 }
 
 function showToast(message) {
     const toast = document.getElementById('toast');
+    const toastMsg = document.getElementById('toastMessage');
     if (!toast) return;
-    toast.textContent = message;
+
+    if (toastMsg) {
+        toastMsg.textContent = message;
+    } else {
+        toast.textContent = message;
+    }
+
     toast.classList.add('show');
     clearTimeout(toast._timeout);
     toast._timeout = setTimeout(() => {
         toast.classList.remove('show');
-    }, 2500);
+    }, 2800);
 }
 
 // ===== INITIALIZATION =====
@@ -186,14 +233,15 @@ function init() {
     setupPWAInstall();
     setupPullToRefresh();
     setupRouting();
+    setupOutsideClicks();
 
-    // Check if user was previously logged in and set initial history state
+    // Check login state
     if (appState.user) {
         showScreen('homeScreen', false);
         if (window.history && window.history.replaceState) {
             window.history.replaceState({ screen: 'homeScreen' }, '', '#homeScreen');
         }
-        updateFAB();
+        updateAdminControls();
         switchView(appState.currentView || 'feed');
     } else {
         showScreen('loginScreen', false);
@@ -216,21 +264,79 @@ function loadState() {
                     ...(parsed.deadlineColors || {})
                 }
             };
-        } else {
-            saveState();
         }
+        appState.savedNotices = JSON.parse(localStorage.getItem('savedNotices') || '[]');
+        appState.archivedNotices = JSON.parse(localStorage.getItem('archivedNotices') || '[]');
     } catch (e) {
-        console.error('Failed to parse appState:', e);
+        console.error('Failed to parse state:', e);
     }
 }
 
-// ===== URGENCY COLORS & STYLES =====
-function hexToRgba(hex, alpha = 0.12) {
+function saveState() {
+    try {
+        localStorage.setItem('appState', JSON.stringify({
+            user: appState.user,
+            isAdmin: appState.isAdmin,
+            notificationsEnabled: appState.notificationsEnabled,
+            notificationsTime: appState.notificationsTime,
+            currentView: appState.currentView,
+            deadlineColors: appState.deadlineColors
+        }));
+        localStorage.setItem('savedNotices', JSON.stringify(appState.savedNotices));
+        localStorage.setItem('archivedNotices', JSON.stringify(appState.archivedNotices));
+    } catch (e) {
+        console.error('Failed to save state:', e);
+    }
+}
+
+function loadNotices() {
+    try {
+        const saved = localStorage.getItem('notices');
+        let notices = saved ? JSON.parse(saved) : getSampleNotices();
+
+        // Ensure category and sample attachments exist
+        if (Array.isArray(notices)) {
+            const samples = getSampleNotices();
+            notices = notices.map(n => {
+                if (!n.category) {
+                    if (n.deadline) n.category = 'Deadlines';
+                    else if (n.priority === 'high') n.category = 'Academic';
+                    else n.category = 'Admin';
+                }
+                const sampleMatch = samples.find(s => s.id === n.id);
+                if (sampleMatch && sampleMatch.attachment && !n.attachment) {
+                    n.attachment = sampleMatch.attachment;
+                }
+                return n;
+            });
+            localStorage.setItem('notices', JSON.stringify(notices));
+        }
+
+        appState.notices = notices;
+        if (!saved) {
+            saveNotices();
+        }
+        renderNotices();
+    } catch (e) {
+        console.error('Failed to load notices:', e);
+        appState.notices = getSampleNotices();
+        renderNotices();
+    }
+}
+
+function saveNotices() {
+    try {
+        localStorage.setItem('notices', JSON.stringify(appState.notices));
+    } catch (e) {
+        console.error('Failed to save notices:', e);
+    }
+}
+
+// ===== URGENCY COLORS =====
+function hexToRgba(hex, alpha = 0.08) {
     if (!hex || hex[0] !== '#') return `rgba(0,0,0,${alpha})`;
     let c = hex.substring(1);
-    if (c.length === 3) {
-        c = c.split('').map(x => x + x).join('');
-    }
+    if (c.length === 3) c = c.split('').map(x => x + x).join('');
     const num = parseInt(c, 16);
     const r = (num >> 16) & 255;
     const g = (num >> 8) & 255;
@@ -247,11 +353,11 @@ function applyUrgencyColors() {
 
     const root = document.documentElement;
     root.style.setProperty('--urgency-urgent', colors.urgent);
-    root.style.setProperty('--urgency-urgent-bg', hexToRgba(colors.urgent, 0.12));
+    root.style.setProperty('--urgency-urgent-bg', hexToRgba(colors.urgent, 0.08));
     root.style.setProperty('--urgency-upcoming', colors.upcoming);
-    root.style.setProperty('--urgency-upcoming-bg', hexToRgba(colors.upcoming, 0.12));
+    root.style.setProperty('--urgency-upcoming-bg', hexToRgba(colors.upcoming, 0.08));
     root.style.setProperty('--urgency-later', colors.later);
-    root.style.setProperty('--urgency-later-bg', hexToRgba(colors.later, 0.12));
+    root.style.setProperty('--urgency-later-bg', hexToRgba(colors.later, 0.08));
 
     const inputUrgent = document.getElementById('urgencyColorUrgent');
     const inputUpcoming = document.getElementById('urgencyColorUpcoming');
@@ -273,7 +379,7 @@ function updateUrgencyColor(tier, hexValue) {
     if (appState.currentView === 'deadlines') {
         renderDeadlines();
     }
-    showToast(`Updated ${tier} urgency color`);
+    showToast(`Updated ${tier} color`);
 }
 
 function resetUrgencyColors() {
@@ -291,53 +397,6 @@ function resetUrgencyColors() {
     showToast('Reset urgency colors to default');
 }
 
-function saveState() {
-    try {
-        localStorage.setItem('appState', JSON.stringify(appState));
-    } catch (e) {
-        console.error('Failed to save appState:', e);
-    }
-}
-
-function loadNotices() {
-    try {
-        const saved = localStorage.getItem('notices');
-        let notices = saved ? JSON.parse(saved) : getSampleNotices();
-        if (saved && Array.isArray(notices)) {
-            const samples = getSampleNotices();
-            let updated = false;
-            notices = notices.map(n => {
-                const sampleMatch = samples.find(s => s.id === n.id);
-                if (sampleMatch && sampleMatch.attachment && !n.attachment) {
-                    n.attachment = sampleMatch.attachment;
-                    updated = true;
-                }
-                return n;
-            });
-            if (updated) {
-                localStorage.setItem('notices', JSON.stringify(notices));
-            }
-        }
-        appState.notices = notices;
-        if (!saved) {
-            saveNotices();
-        }
-        renderNotices();
-    } catch (e) {
-        console.error('Failed to load notices:', e);
-        appState.notices = getSampleNotices();
-        renderNotices();
-    }
-}
-
-function saveNotices() {
-    try {
-        localStorage.setItem('notices', JSON.stringify(appState.notices));
-    } catch (e) {
-        console.error('Failed to save notices:', e);
-    }
-}
-
 // ===== AUTHENTICATION =====
 function login() {
     const usernameInput = document.getElementById('usernameInput');
@@ -348,79 +407,70 @@ function login() {
         return;
     }
 
-    appState.user = {
-        username: username,
-        loginTime: new Date().toISOString()
-    };
-    appState.isAdmin = username.toLowerCase() === 'admin';
+    const cleanUsername = username.toLowerCase();
+    appState.user = { username: cleanUsername };
+    appState.isAdmin = cleanUsername === 'admin';
     saveState();
 
-    showScreen('homeScreen');
-    renderNotices();
-    updateFAB();
-    showToast(`Welcome, ${username}!`);
+    updateAdminControls();
+    showScreen('homeScreen', true);
+    switchView(appState.currentView || 'feed');
+    showToast(`Signed in as ${cleanUsername}`);
 }
 
 function logout() {
-    if (confirm('Are you sure you want to log out?')) {
-        appState.user = null;
-        appState.isAdmin = false;
-        saveState();
+    appState.user = null;
+    appState.isAdmin = false;
+    saveState();
 
-        const userInput = document.getElementById('usernameInput');
-        const passInput = document.getElementById('passwordInput');
-        if (userInput) userInput.value = 'student';
-        if (passInput) passInput.value = '';
+    updateAdminControls();
+    const usernameInput = document.getElementById('usernameInput');
+    const passwordInput = document.getElementById('passwordInput');
+    if (usernameInput) usernameInput.value = 'student';
+    if (passwordInput) passwordInput.value = '';
 
-        showScreen('loginScreen');
-        showToast('Logged out');
+    showScreen('loginScreen', true);
+    showToast('Signed out');
+}
+
+function updateAdminControls() {
+    const topAddBtn = document.getElementById('topAddNoticeBtn');
+    const fab = document.getElementById('fab');
+
+    if (appState.isAdmin) {
+        if (topAddBtn) topAddBtn.classList.remove('hidden');
+        if (fab) fab.classList.remove('hidden');
+    } else {
+        if (topAddBtn) topAddBtn.classList.add('hidden');
+        if (fab) fab.classList.add('hidden');
     }
 }
 
-// ===== SCREEN MANAGEMENT & HISTORY ROUTING =====
-function clearSearch() {
-    const searchInput = document.getElementById('searchInput');
-    if (searchInput && searchInput.value !== '') {
-        searchInput.value = '';
-    }
-}
-
+// ===== NAVIGATION & SCREEN ROUTING =====
 function showScreen(screenId, pushHistory = true) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-    const target = document.getElementById(screenId);
-    if (target) {
-        target.classList.add('active');
-        target.scrollTop = 0;
-    }
 
-    // Always clear search input when returning or navigating to homeScreen
-    if (screenId === 'homeScreen') {
-        clearSearch();
+    const screen = document.getElementById(screenId);
+    if (screen) {
+        screen.classList.add('active');
+        screen.scrollTop = 0;
     }
 
     if (pushHistory && window.history && window.history.pushState) {
-        const currentState = window.history.state;
-        if (!currentState || currentState.screen !== screenId) {
-            window.history.pushState({ screen: screenId }, '', `#${screenId}`);
-        }
+        window.history.pushState({ screen: screenId }, '', `#${screenId}`);
     }
 }
 
 function setupRouting() {
     window.addEventListener('popstate', (event) => {
-        const targetScreen = event.state && event.state.screen 
-            ? event.state.screen 
-            : (appState.user ? 'homeScreen' : 'loginScreen');
-
-        // Transition without pushing redundant history
-        showScreen(targetScreen, false);
-
-        if (targetScreen === 'homeScreen') {
-            clearSearch();
-            if (appState.currentView === 'deadlines') {
-                renderDeadlines();
-            } else {
-                renderNotices();
+        if (event.state && event.state.screen) {
+            showScreen(event.state.screen, false);
+            if (event.state.screen === 'homeScreen') {
+                if (appState.currentView === 'deadlines') {
+                    renderDeadlines();
+                } else {
+                    renderNotices();
+                }
             }
         }
     });
@@ -428,7 +478,6 @@ function setupRouting() {
 
 function goHome() {
     clearSearch();
-    // Use history.back() if previous history entry is homeScreen to avoid inflating history stack
     if (window.history.state && window.history.state.screen && window.history.state.screen !== 'homeScreen') {
         window.history.back();
     } else {
@@ -441,7 +490,7 @@ function goHome() {
     }
 }
 
-// ===== VIEW MODE SWITCHER =====
+// ===== VIEW SWITCHER (Feed vs Deadlines) =====
 function switchView(viewName) {
     appState.currentView = viewName;
     saveState();
@@ -456,213 +505,222 @@ function switchView(viewName) {
         if (feedBtn) feedBtn.classList.remove('active');
         if (deadlinesBtn) deadlinesBtn.classList.add('active');
         if (noticeList) noticeList.style.display = 'none';
-        if (deadlineTimeline) deadlineTimeline.style.display = 'block';
+        if (deadlineTimeline) deadlineTimeline.style.display = 'flex';
         if (searchInput) {
             searchInput.placeholder = 'Search upcoming deadlines...';
-            searchInput.value = '';
         }
         renderDeadlines();
     } else {
         if (feedBtn) feedBtn.classList.add('active');
         if (deadlinesBtn) deadlinesBtn.classList.remove('active');
-        if (noticeList) noticeList.style.display = 'block';
+        if (noticeList) noticeList.style.display = 'flex';
         if (deadlineTimeline) deadlineTimeline.style.display = 'none';
         if (searchInput) {
-            searchInput.placeholder = 'Search notices by title, content, or priority...';
-            searchInput.value = '';
+            searchInput.placeholder = 'Search notices by title, content, or author...';
         }
         renderNotices();
     }
 }
 
-let currentAdminAttachment = null;
+// ===== CATEGORY FILTER CHIPS =====
+function setCategoryFilter(category) {
+    appState.activeCategory = category;
 
-function handleAttachmentSelect(event) {
-    const file = event.target.files && event.target.files[0];
-    if (!file) return;
+    document.querySelectorAll('.filter-chip').forEach(chip => {
+        if (chip.getAttribute('data-category') === category) {
+            chip.classList.add('active');
+        } else {
+            chip.classList.remove('active');
+        }
+    });
 
-    // Check size limit: 2MB max for localStorage
-    const MAX_SIZE = 2 * 1024 * 1024;
-    if (file.size > MAX_SIZE) {
-        showToast('File exceeds 2MB limit for local browser storage');
-        event.target.value = '';
+    filterNotices();
+}
+
+// ===== SEARCH & AUTOCOMPLETE =====
+function handleSearchInput() {
+    const input = document.getElementById('searchInput');
+    const query = input ? input.value.trim() : '';
+    const clearBtn = document.getElementById('searchClearBtn');
+
+    if (clearBtn) {
+        if (query.length > 0) {
+            clearBtn.classList.remove('hidden');
+        } else {
+            clearBtn.classList.add('hidden');
+        }
+    }
+
+    renderAutocompleteSuggestions(query);
+    filterNotices();
+}
+
+function handleSearchKeydown(event) {
+    if (event.key === 'Escape') {
+        hideAutocompleteSuggestions();
+    }
+}
+
+function renderAutocompleteSuggestions(query) {
+    const suggestionsBox = document.getElementById('searchSuggestions');
+    if (!suggestionsBox) return;
+
+    if (!query || query.length < 1) {
+        hideAutocompleteSuggestions();
         return;
     }
 
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        currentAdminAttachment = {
-            name: file.name,
-            type: file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream'),
-            size: file.size,
-            data: e.target.result
-        };
-        showAdminAttachmentPreview(currentAdminAttachment);
-    };
-    reader.onerror = function() {
-        showToast('Failed to read selected file');
-    };
-    reader.readAsDataURL(file);
-}
+    const q = query.toLowerCase();
+    const activeNotices = appState.notices.filter(n => !appState.archivedNotices.includes(n.id));
+    const matches = activeNotices.filter(n =>
+        (n.title && n.title.toLowerCase().includes(q)) ||
+        (n.category && n.category.toLowerCase().includes(q)) ||
+        (n.author && n.author.toLowerCase().includes(q))
+    ).slice(0, 5);
 
-function showAdminAttachmentPreview(attachment) {
-    const container = document.getElementById('attachmentPreviewAdmin');
-    const icon = document.getElementById('adminAttachmentIcon');
-    const name = document.getElementById('adminAttachmentName');
-    const size = document.getElementById('adminAttachmentSize');
-
-    if (!container) return;
-
-    const isPdf = attachment.type === 'application/pdf' || (attachment.name && attachment.name.toLowerCase().endsWith('.pdf'));
-    if (icon) icon.textContent = isPdf ? '📄' : '🖼️';
-    if (name) name.textContent = attachment.name || 'Attachment';
-    if (size) size.textContent = `(${formatBytes(attachment.size)})`;
-
-    container.style.display = 'flex';
-}
-
-function removeAdminAttachment() {
-    currentAdminAttachment = null;
-    const fileInput = document.getElementById('noticeAttachment');
-    if (fileInput) fileInput.value = '';
-    const container = document.getElementById('attachmentPreviewAdmin');
-    if (container) container.style.display = 'none';
-    showToast('Attachment removed');
-}
-
-function openAdmin() {
-    if (!appState.isAdmin) {
-        showToast('Only administrators can post notices');
+    if (matches.length === 0) {
+        hideAutocompleteSuggestions();
         return;
     }
 
-    const titleHeader = document.getElementById('adminScreenTitle');
-    const submitBtn = document.getElementById('adminSubmitBtn');
-    const noticeIdInput = document.getElementById('noticeId');
+    while (suggestionsBox.firstChild) {
+        suggestionsBox.removeChild(suggestionsBox.firstChild);
+    }
 
-    if (titleHeader) titleHeader.textContent = 'Post Notice';
-    if (submitBtn) submitBtn.textContent = 'Post Notice';
-    if (noticeIdInput) noticeIdInput.value = '';
+    matches.forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'suggestion-item';
+        row.setAttribute('role', 'option');
 
-    document.getElementById('noticeTitle').value = '';
-    document.getElementById('noticeContent').value = '';
-    document.getElementById('noticeDeadline').value = '';
-    document.getElementById('noticePriority').value = 'medium';
+        const titleSpan = document.createElement('span');
+        titleSpan.className = 'suggestion-title';
+        titleSpan.textContent = item.title;
 
-    currentAdminAttachment = null;
-    const fileInput = document.getElementById('noticeAttachment');
-    if (fileInput) fileInput.value = '';
-    const container = document.getElementById('attachmentPreviewAdmin');
-    if (container) container.style.display = 'none';
+        const badge = document.createElement('span');
+        badge.className = 'suggestion-badge';
+        badge.textContent = item.category || 'Academic';
 
-    showScreen('adminScreen');
+        row.appendChild(titleSpan);
+        row.appendChild(badge);
+
+        row.addEventListener('click', () => {
+            hideAutocompleteSuggestions();
+            viewNotice(item.id);
+        });
+
+        suggestionsBox.appendChild(row);
+    });
+
+    suggestionsBox.classList.remove('hidden');
 }
 
-function openEditNotice(id) {
-    if (!appState.isAdmin) {
-        showToast('Only administrators can edit notices');
-        return;
+function hideAutocompleteSuggestions() {
+    const box = document.getElementById('searchSuggestions');
+    if (box) box.classList.add('hidden');
+}
+
+function clearSearch() {
+    const input = document.getElementById('searchInput');
+    const clearBtn = document.getElementById('searchClearBtn');
+    if (input) input.value = '';
+    if (clearBtn) clearBtn.classList.add('hidden');
+    hideAutocompleteSuggestions();
+    filterNotices();
+}
+
+function setupOutsideClicks() {
+    document.addEventListener('click', (e) => {
+        const searchSection = document.querySelector('.search-section');
+        if (searchSection && !searchSection.contains(e.target)) {
+            hideAutocompleteSuggestions();
+        }
+    });
+}
+
+function filterNotices() {
+    const input = document.getElementById('searchInput');
+    const query = input ? input.value.trim().toLowerCase() : '';
+    const activeCategory = appState.activeCategory;
+
+    // Filter out archived
+    let base = appState.notices.filter(n => !appState.archivedNotices.includes(n.id));
+
+    // Category filter
+    if (activeCategory !== 'All') {
+        if (activeCategory === 'Deadlines') {
+            base = base.filter(n => Boolean(n.deadline));
+        } else {
+            base = base.filter(n => n.category === activeCategory);
+        }
     }
 
-    const notice = appState.notices.find(n => n.id === Number(id));
-    if (!notice) {
-        showToast('Notice not found');
-        return;
+    // Text query filter
+    if (query) {
+        base = base.filter(n =>
+            (n.title && n.title.toLowerCase().includes(query)) ||
+            (n.content && n.content.toLowerCase().includes(query)) ||
+            (n.author && n.author.toLowerCase().includes(query)) ||
+            (n.priority && n.priority.toLowerCase().includes(query))
+        );
     }
 
-    const titleHeader = document.getElementById('adminScreenTitle');
-    const submitBtn = document.getElementById('adminSubmitBtn');
-    const noticeIdInput = document.getElementById('noticeId');
-    const titleInput = document.getElementById('noticeTitle');
-    const contentInput = document.getElementById('noticeContent');
-    const deadlineInput = document.getElementById('noticeDeadline');
-    const priorityInput = document.getElementById('noticePriority');
-
-    if (titleHeader) titleHeader.textContent = 'Edit Notice';
-    if (submitBtn) submitBtn.textContent = 'Update Notice';
-    if (noticeIdInput) noticeIdInput.value = notice.id;
-
-    if (titleInput) titleInput.value = notice.title || '';
-    if (contentInput) contentInput.value = notice.content || '';
-    if (deadlineInput) deadlineInput.value = notice.deadline || '';
-    if (priorityInput) priorityInput.value = notice.priority || 'medium';
-
-    const fileInput = document.getElementById('noticeAttachment');
-    if (fileInput) fileInput.value = '';
-
-    if (notice.attachment) {
-        currentAdminAttachment = { ...notice.attachment };
-        showAdminAttachmentPreview(currentAdminAttachment);
+    if (appState.currentView === 'deadlines') {
+        renderDeadlines(base.filter(n => Boolean(n.deadline)));
     } else {
-        currentAdminAttachment = null;
-        const container = document.getElementById('attachmentPreviewAdmin');
-        if (container) container.style.display = 'none';
-    }
-
-    showScreen('adminScreen');
-}
-
-function openSettings() {
-    updateNotifToggle();
-    const notifSelect = document.getElementById('notifTime');
-    if (notifSelect) {
-        notifSelect.value = appState.notificationsTime || 'morning';
-    }
-    applyUrgencyColors();
-    showScreen('settingsScreen');
-}
-
-function updateFAB() {
-    const fab = document.getElementById('fab');
-    if (!fab) return;
-    if (appState.isAdmin) {
-        fab.classList.remove('hidden');
-    } else {
-        fab.classList.add('hidden');
+        renderNotices(base);
     }
 }
 
-// ===== NOTICE MANAGEMENT (FULL CRUD) =====
-function renderNotices(noticesToRender = appState.notices) {
+// ===== NOTICE MANAGEMENT (FEED VIEW) =====
+function renderNotices(noticesToRender = null) {
     const list = document.getElementById('noticeList');
     if (!list) return;
 
-    // Securely clear previous children without innerHTML
     while (list.firstChild) {
         list.removeChild(list.firstChild);
     }
 
-    if (!noticesToRender || noticesToRender.length === 0) {
-        const emptyState = document.createElement('div');
-        emptyState.className = 'empty-state';
+    let notices = noticesToRender;
+    if (!notices) {
+        notices = appState.notices.filter(n => !appState.archivedNotices.includes(n.id));
+        if (appState.activeCategory !== 'All') {
+            if (appState.activeCategory === 'Deadlines') {
+                notices = notices.filter(n => Boolean(n.deadline));
+            } else {
+                notices = notices.filter(n => n.category === appState.activeCategory);
+            }
+        }
+    }
 
-        const icon = document.createElement('div');
-        icon.className = 'empty-state-icon';
-        icon.textContent = '📭';
-
-        const msg = document.createElement('p');
-        msg.textContent = 'No notices found';
-
-        emptyState.appendChild(icon);
-        emptyState.appendChild(msg);
-        list.appendChild(emptyState);
+    if (!notices || notices.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-state';
+        empty.innerHTML = `
+            <div class="empty-state-icon">
+                <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <rect x="3" y="4" width="18" height="18" rx="2"></rect>
+                    <line x1="9" y1="9" x2="15" y2="9"></line>
+                    <line x1="9" y1="13" x2="15" y2="13"></line>
+                    <line x1="9" y1="17" x2="11" y2="17"></line>
+                </svg>
+            </div>
+            <p>No notices found in this view</p>
+        `;
+        list.appendChild(empty);
         return;
     }
 
     const fragment = document.createDocumentFragment();
 
-    noticesToRender.forEach(notice => {
-        const card = document.createElement('div');
-        card.className = 'notice-card';
+    notices.forEach(notice => {
+        const card = document.createElement('article');
+        const prio = (notice.priority || 'medium').toLowerCase();
+        card.className = `notice-card priority-${prio}`;
         card.setAttribute('role', 'button');
         card.setAttribute('tabindex', '0');
-        card.setAttribute('aria-label', `Notice: ${notice.title}`);
+        card.setAttribute('aria-label', `${notice.title}, Priority: ${prio}`);
 
-        // Safe event listener referencing notice ID
-        card.addEventListener('click', () => {
-            viewNotice(notice.id);
-        });
-
+        card.addEventListener('click', () => viewNotice(notice.id));
         card.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
@@ -670,51 +728,75 @@ function renderNotices(noticesToRender = appState.notices) {
             }
         });
 
-        const content = document.createElement('div');
-        content.className = 'notice-content';
+        // Header: Category Tag & Priority Badge
+        const cardHeader = document.createElement('div');
+        cardHeader.className = 'notice-card-header';
 
-        const title = document.createElement('div');
-        title.className = 'notice-title';
-        title.textContent = notice.title;
+        const tagsRow = document.createElement('div');
+        tagsRow.className = 'notice-tags-row';
 
-        const date = document.createElement('div');
-        date.className = 'notice-date';
-        let dateInfo = `📅 ${notice.date}`;
-        if (notice.deadline) {
-            dateInfo += ` • Deadline: ${notice.deadline}`;
-        }
-        date.textContent = dateInfo;
-
-        content.appendChild(title);
-        content.appendChild(date);
+        const catTag = document.createElement('span');
+        const catClass = (notice.category || 'Academic').toLowerCase();
+        catTag.className = `category-tag ${catClass}`;
+        catTag.textContent = notice.category || 'Academic';
+        tagsRow.appendChild(catTag);
 
         if (notice.attachment) {
-            const isPdf = notice.attachment.type === 'application/pdf' || (notice.attachment.name && notice.attachment.name.toLowerCase().endsWith('.pdf'));
             const attachPill = document.createElement('span');
             attachPill.className = 'attachment-pill';
-            attachPill.textContent = isPdf ? '📎 PDF Circular' : '📎 Timetable Image';
-            content.appendChild(attachPill);
+            attachPill.innerHTML = `${SVG_ICONS.paperclip} <span>Attachment</span>`;
+            tagsRow.appendChild(attachPill);
         }
 
-        const cardRight = document.createElement('div');
-        cardRight.className = 'card-right';
+        const prioBadge = document.createElement('span');
+        prioBadge.className = `priority-badge ${prio}`;
+        prioBadge.textContent = prio.toUpperCase();
 
-        const priority = document.createElement('span');
-        const prio = (notice.priority || 'medium').toLowerCase();
-        priority.className = `notice-priority priority-${prio}`;
-        priority.textContent = (notice.priority || 'medium').toUpperCase();
-        cardRight.appendChild(priority);
+        cardHeader.appendChild(tagsRow);
+        cardHeader.appendChild(prioBadge);
+        card.appendChild(cardHeader);
 
-        // Admin Edit and Delete action buttons on card
+        // Title
+        const titleEl = document.createElement('h3');
+        titleEl.className = 'notice-card-title';
+        titleEl.textContent = notice.title;
+        card.appendChild(titleEl);
+
+        // Excerpt
+        const excerptEl = document.createElement('p');
+        excerptEl.className = 'notice-card-excerpt';
+        excerptEl.textContent = notice.content;
+        card.appendChild(excerptEl);
+
+        // Footer: Metadata & Actions
+        const footer = document.createElement('div');
+        footer.className = 'notice-card-footer';
+
+        const metaGroup = document.createElement('div');
+        metaGroup.className = 'notice-meta-group';
+
+        const dateItem = document.createElement('div');
+        dateItem.className = 'notice-meta-item';
+        dateItem.innerHTML = `${SVG_ICONS.calendar} <span>${notice.date}</span>`;
+        metaGroup.appendChild(dateItem);
+
+        if (notice.author) {
+            const authorItem = document.createElement('div');
+            authorItem.className = 'notice-meta-item';
+            authorItem.innerHTML = `${SVG_ICONS.user} <span>${notice.author}</span>`;
+            metaGroup.appendChild(authorItem);
+        }
+
+        footer.appendChild(metaGroup);
+
         if (appState.isAdmin) {
             const adminActions = document.createElement('div');
             adminActions.className = 'card-admin-actions';
 
             const editBtn = document.createElement('button');
-            editBtn.className = 'btn-card-action btn-card-edit';
-            editBtn.textContent = '✏️ Edit';
-            editBtn.title = 'Edit Notice';
-            editBtn.setAttribute('aria-label', `Edit Notice: ${notice.title}`);
+            editBtn.className = 'btn-card-action';
+            editBtn.innerHTML = `${SVG_ICONS.edit} <span>Edit</span>`;
+            editBtn.setAttribute('aria-label', `Edit notice ${notice.title}`);
             editBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 openEditNotice(notice.id);
@@ -723,78 +805,298 @@ function renderNotices(noticesToRender = appState.notices) {
 
             const delBtn = document.createElement('button');
             delBtn.className = 'btn-card-action btn-card-delete';
-            delBtn.textContent = '🗑️ Delete';
-            delBtn.title = 'Delete Notice';
-            delBtn.setAttribute('aria-label', `Delete Notice: ${notice.title}`);
+            delBtn.innerHTML = `${SVG_ICONS.trash} <span>Delete</span>`;
+            delBtn.setAttribute('aria-label', `Delete notice ${notice.title}`);
             delBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 deleteNotice(notice.id);
             });
             adminActions.appendChild(delBtn);
 
-            cardRight.appendChild(adminActions);
+            footer.appendChild(adminActions);
         }
 
-        card.appendChild(content);
-        card.appendChild(cardRight);
-
+        card.appendChild(footer);
         fragment.appendChild(card);
     });
 
     list.appendChild(fragment);
 }
 
+// ===== DEADLINE TIMELINE VIEW =====
+function renderDeadlines(noticesToRender = null) {
+    const timeline = document.getElementById('deadlineTimeline');
+    if (!timeline) return;
+
+    while (timeline.firstChild) {
+        timeline.removeChild(timeline.firstChild);
+    }
+
+    let items = noticesToRender || appState.notices.filter(n => !appState.archivedNotices.includes(n.id));
+    const noticesWithDeadlines = items.filter(n => n.deadline);
+
+    if (noticesWithDeadlines.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-state';
+        empty.innerHTML = `
+            <div class="empty-state-icon">
+                <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <rect x="3" y="4" width="18" height="18" rx="2"></rect>
+                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                </svg>
+            </div>
+            <p>No active deadlines found</p>
+        `;
+        timeline.appendChild(empty);
+        return;
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const enriched = noticesWithDeadlines.map(notice => {
+        const deadlineDate = new Date(notice.deadline);
+        deadlineDate.setHours(23, 59, 59, 999);
+        const diffMs = deadlineDate.getTime() - today.getTime();
+        const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+        let tier = 'later';
+        let urgencyLabel = '';
+
+        if (diffDays < 0) {
+            tier = 'expired';
+            urgencyLabel = 'Deadline Passed';
+        } else if (diffDays === 0) {
+            tier = 'urgent';
+            urgencyLabel = 'Due Today';
+        } else if (diffDays === 1) {
+            tier = 'urgent';
+            urgencyLabel = 'Due Tomorrow (< 24h)';
+        } else if (diffDays <= 2) {
+            tier = 'urgent';
+            urgencyLabel = `Due in ${diffDays} days (< 48h)`;
+        } else if (diffDays <= 7) {
+            tier = 'upcoming';
+            urgencyLabel = `Due in ${diffDays} days (< 7d)`;
+        } else {
+            tier = 'later';
+            const weeks = Math.round(diffDays / 7);
+            urgencyLabel = `Due in ${diffDays} days (${weeks} ${weeks === 1 ? 'wk' : 'wks'})`;
+        }
+
+        return {
+            notice,
+            diffDays,
+            tier,
+            urgencyLabel,
+            formattedDate: deadlineDate.toLocaleDateString('en-GB', {
+                weekday: 'short',
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric'
+            })
+        };
+    });
+
+    // Chronological sorting: nearest first, expired last
+    enriched.sort((a, b) => {
+        if (a.diffDays >= 0 && b.diffDays >= 0) return a.diffDays - b.diffDays;
+        if (a.diffDays >= 0 && b.diffDays < 0) return -1;
+        if (a.diffDays < 0 && b.diffDays >= 0) return 1;
+        return b.diffDays - a.diffDays;
+    });
+
+    // Summary counts bar
+    const urgentCount = enriched.filter(e => e.tier === 'urgent').length;
+    const upcomingCount = enriched.filter(e => e.tier === 'upcoming').length;
+    const laterCount = enriched.filter(e => e.tier === 'later').length;
+
+    const summaryBar = document.createElement('div');
+    summaryBar.className = 'timeline-summary';
+
+    if (urgentCount > 0) {
+        const chip = document.createElement('div');
+        chip.className = 'timeline-summary-chip urgent';
+        chip.textContent = `${urgentCount} Urgent (<48h)`;
+        summaryBar.appendChild(chip);
+    }
+    if (upcomingCount > 0) {
+        const chip = document.createElement('div');
+        chip.className = 'timeline-summary-chip upcoming';
+        chip.textContent = `${upcomingCount} Upcoming (<7d)`;
+        summaryBar.appendChild(chip);
+    }
+    if (laterCount > 0) {
+        const chip = document.createElement('div');
+        chip.className = 'timeline-summary-chip later';
+        chip.textContent = `${laterCount} Later (>7d)`;
+        summaryBar.appendChild(chip);
+    }
+
+    timeline.appendChild(summaryBar);
+
+    const fragment = document.createDocumentFragment();
+
+    enriched.forEach(item => {
+        const card = document.createElement('div');
+        card.className = `timeline-card tier-${item.tier}`;
+        card.setAttribute('role', 'button');
+        card.setAttribute('tabindex', '0');
+        card.setAttribute('aria-label', `Deadline: ${item.notice.title}, ${item.urgencyLabel}`);
+
+        card.addEventListener('click', () => viewNotice(item.notice.id));
+        card.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                viewNotice(item.notice.id);
+            }
+        });
+
+        // Header: Urgency badge & Date
+        const header = document.createElement('div');
+        header.className = 'timeline-header';
+
+        const badge = document.createElement('span');
+        badge.className = `urgency-badge ${item.tier}`;
+        badge.textContent = item.urgencyLabel;
+
+        const dateChip = document.createElement('span');
+        dateChip.className = 'timeline-date-chip';
+        dateChip.innerHTML = `${SVG_ICONS.calendar} <span>${item.formattedDate}</span>`;
+
+        header.appendChild(badge);
+        header.appendChild(dateChip);
+
+        if (item.notice.attachment) {
+            const attachPill = document.createElement('span');
+            attachPill.className = 'attachment-pill';
+            attachPill.innerHTML = `${SVG_ICONS.paperclip} <span>Attachment</span>`;
+            header.appendChild(attachPill);
+        }
+
+        card.appendChild(header);
+
+        // Title
+        const title = document.createElement('h3');
+        title.className = 'timeline-title';
+        title.textContent = item.notice.title;
+        card.appendChild(title);
+
+        // Excerpt
+        const desc = document.createElement('p');
+        desc.className = 'timeline-desc';
+        desc.textContent = item.notice.content;
+        card.appendChild(desc);
+
+        // Footer Actions
+        const footer = document.createElement('div');
+        footer.className = 'timeline-footer';
+
+        const prioSpan = document.createElement('span');
+        const prio = (item.notice.priority || 'medium').toLowerCase();
+        prioSpan.className = `priority-badge ${prio}`;
+        prioSpan.textContent = prio.toUpperCase();
+        footer.appendChild(prioSpan);
+
+        const actions = document.createElement('div');
+        actions.className = 'timeline-actions';
+
+        const viewBtn = document.createElement('button');
+        viewBtn.className = 'btn-timeline-action';
+        viewBtn.innerHTML = `${SVG_ICONS.eye} <span>Details</span>`;
+        viewBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            viewNotice(item.notice.id);
+        });
+        actions.appendChild(viewBtn);
+
+        const remindBtn = document.createElement('button');
+        remindBtn.className = 'btn-timeline-action';
+        remindBtn.innerHTML = `${SVG_ICONS.calendar} <span>Remind</span>`;
+        remindBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openReminderModal(item.notice.id);
+        });
+        actions.appendChild(remindBtn);
+
+        footer.appendChild(actions);
+        card.appendChild(footer);
+        fragment.appendChild(card);
+    });
+
+    timeline.appendChild(fragment);
+}
+
+// ===== TWO-COLUMN NOTICE DETAIL SCREEN =====
 function viewNotice(id) {
     const notice = appState.notices.find(n => n.id === Number(id));
     if (!notice) return;
 
-    const detail = document.getElementById('noticeDetail');
-    if (!detail) return;
+    const detailContainer = document.getElementById('noticeDetail');
+    if (!detailContainer) return;
 
-    // Securely clear previous children without innerHTML
-    while (detail.firstChild) {
-        detail.removeChild(detail.firstChild);
+    while (detailContainer.firstChild) {
+        detailContainer.removeChild(detailContainer.firstChild);
     }
 
-    const container = document.createElement('div');
-    container.className = 'notice-detail';
+    const prio = (notice.priority || 'medium').toLowerCase();
+    const isSaved = appState.savedNotices.includes(notice.id);
 
-    const h2 = document.createElement('h2');
-    h2.textContent = notice.title;
-    container.appendChild(h2);
+    // LEFT COLUMN: MAIN ARTICLE
+    const mainCol = document.createElement('div');
+    mainCol.className = 'detail-main';
 
-    const meta = document.createElement('div');
-    meta.className = 'notice-meta';
+    const articleCard = document.createElement('article');
+    articleCard.className = 'detail-article-card';
 
-    const dateSpan = document.createElement('span');
-    dateSpan.textContent = `📅 ${notice.date}`;
-    meta.appendChild(dateSpan);
+    // Category & Priority Breadcrumb
+    const catRow = document.createElement('div');
+    catRow.className = 'detail-category-row';
 
-    const authorSpan = document.createElement('span');
-    authorSpan.textContent = `✍️ ${notice.author || 'Admin'}`;
-    meta.appendChild(authorSpan);
+    const catTag = document.createElement('span');
+    const catClass = (notice.category || 'Academic').toLowerCase();
+    catTag.className = `category-tag ${catClass}`;
+    catTag.textContent = notice.category || 'Academic';
+    catRow.appendChild(catTag);
 
-    container.appendChild(meta);
+    const prioBadge = document.createElement('span');
+    prioBadge.className = `priority-badge ${prio}`;
+    prioBadge.textContent = `${prio.toUpperCase()} PRIORITY`;
+    catRow.appendChild(prioBadge);
 
-    const body = document.createElement('div');
-    body.className = 'notice-body';
-    body.textContent = notice.content;
-    container.appendChild(body);
+    articleCard.appendChild(catRow);
 
-    if (notice.deadline) {
-        const deadlineBox = document.createElement('div');
-        deadlineBox.className = 'notice-deadline-box';
+    // Title
+    const h1 = document.createElement('h1');
+    h1.className = 'detail-title';
+    h1.textContent = notice.title;
+    articleCard.appendChild(h1);
 
-        const deadlineLabel = document.createElement('strong');
-        deadlineLabel.textContent = '⏰ Deadline: ';
-        deadlineBox.appendChild(deadlineLabel);
+    // Meta bar
+    const metaBar = document.createElement('div');
+    metaBar.className = 'detail-meta-bar';
 
-        const deadlineVal = document.createTextNode(notice.deadline);
-        deadlineBox.appendChild(deadlineVal);
+    const dateMeta = document.createElement('div');
+    dateMeta.className = 'detail-meta-item';
+    dateMeta.innerHTML = `${SVG_ICONS.calendar} <span>Posted ${notice.date}</span>`;
+    metaBar.appendChild(dateMeta);
 
-        container.appendChild(deadlineBox);
-    }
+    const authorMeta = document.createElement('div');
+    authorMeta.className = 'detail-meta-item';
+    authorMeta.innerHTML = `${SVG_ICONS.user} <span>${notice.author || 'Administrative Desk'}</span>`;
+    metaBar.appendChild(authorMeta);
 
+    articleCard.appendChild(metaBar);
+
+    // Body content
+    const bodyEl = document.createElement('div');
+    bodyEl.className = 'detail-content';
+    bodyEl.textContent = notice.content;
+    articleCard.appendChild(bodyEl);
+
+    // Attachment Box if present
     if (notice.attachment) {
         const isPdf = notice.attachment.type === 'application/pdf' || (notice.attachment.name && notice.attachment.name.toLowerCase().endsWith('.pdf'));
         const isImage = (notice.attachment.type && notice.attachment.type.startsWith('image/')) || (notice.attachment.name && /\.(png|jpe?g|svg|webp|gif)$/i.test(notice.attachment.name));
@@ -804,7 +1106,7 @@ function viewNotice(id) {
 
         const attachHeader = document.createElement('div');
         attachHeader.className = 'attachment-box-header';
-        attachHeader.textContent = isPdf ? '📄 Official Circular / Circular PDF' : '🖼️ Official Timetable / Attachment';
+        attachHeader.innerHTML = `${SVG_ICONS.paperclip} <span>${isPdf ? 'Official Circular Document' : 'Official Timetable Attachment'}</span>`;
         attachBox.appendChild(attachHeader);
 
         if (isImage) {
@@ -814,11 +1116,9 @@ function viewNotice(id) {
             const img = document.createElement('img');
             img.className = 'attachment-preview-img';
             img.src = notice.attachment.data;
-            img.alt = notice.attachment.name || 'Notice Attachment';
-            img.title = 'Click to open full view';
-            img.addEventListener('click', () => {
-                openAttachmentViewer(notice.attachment);
-            });
+            img.alt = notice.attachment.name || 'Attachment';
+            img.title = 'Click to open in new tab';
+            img.addEventListener('click', () => openAttachmentViewer(notice.attachment));
 
             imgContainer.appendChild(img);
             attachBox.appendChild(imgContainer);
@@ -847,423 +1147,226 @@ function viewNotice(id) {
 
         const viewBtn = document.createElement('button');
         viewBtn.className = 'btn-attachment-view';
-        viewBtn.textContent = isPdf ? '📄 View PDF / Timetable' : '🖼️ View Full Image';
-        viewBtn.addEventListener('click', () => {
-            openAttachmentViewer(notice.attachment);
-        });
+        viewBtn.innerHTML = `${SVG_ICONS.eye} <span>View Document</span>`;
+        viewBtn.addEventListener('click', () => openAttachmentViewer(notice.attachment));
         attachActions.appendChild(viewBtn);
 
         const downloadBtn = document.createElement('button');
         downloadBtn.className = 'btn-attachment-download';
-        downloadBtn.textContent = '📥 Download';
-        downloadBtn.addEventListener('click', () => {
-            downloadAttachment(notice.attachment);
-        });
+        downloadBtn.innerHTML = `${SVG_ICONS.download} <span>Download</span>`;
+        downloadBtn.addEventListener('click', () => downloadAttachment(notice.attachment));
         attachActions.appendChild(downloadBtn);
 
         attachMeta.appendChild(attachActions);
         attachBox.appendChild(attachMeta);
-        container.appendChild(attachBox);
+        articleCard.appendChild(attachBox);
     }
 
-    const actions = document.createElement('div');
-    actions.className = 'notice-actions';
+    mainCol.appendChild(articleCard);
 
-    // Share button using addEventListener and notice ID
+    // RELATED NOTICES SECTION
+    const relatedSection = document.createElement('section');
+    relatedSection.className = 'related-notices-section';
+
+    const relatedTitle = document.createElement('h3');
+    relatedTitle.className = 'related-section-title';
+    relatedTitle.textContent = `Related ${notice.category || 'Academic'} Notices`;
+    relatedSection.appendChild(relatedTitle);
+
+    const relatedGrid = document.createElement('div');
+    relatedGrid.className = 'related-cards-grid';
+
+    const relatedNotices = appState.notices
+        .filter(n => n.id !== notice.id && !appState.archivedNotices.includes(n.id))
+        .filter(n => n.category === notice.category || n.priority === notice.priority)
+        .slice(0, 3);
+
+    if (relatedNotices.length === 0) {
+        const noRelated = document.createElement('p');
+        noRelated.style.fontSize = '12px';
+        noRelated.style.color = 'var(--text-muted)';
+        noRelated.textContent = 'No other notices in this category';
+        relatedGrid.appendChild(noRelated);
+    } else {
+        relatedNotices.forEach(rel => {
+            const relCard = document.createElement('div');
+            relCard.className = 'related-card';
+            relCard.addEventListener('click', () => viewNotice(rel.id));
+
+            const relTitle = document.createElement('div');
+            relTitle.className = 'related-card-title';
+            relTitle.textContent = rel.title;
+
+            const relMeta = document.createElement('div');
+            relMeta.className = 'related-card-meta';
+            relMeta.textContent = `${rel.date} &bull; ${rel.author || 'Admin'}`;
+
+            relCard.appendChild(relTitle);
+            relCard.appendChild(relMeta);
+            relatedGrid.appendChild(relCard);
+        });
+    }
+
+    relatedSection.appendChild(relatedGrid);
+    mainCol.appendChild(relatedSection);
+    detailContainer.appendChild(mainCol);
+
+    // RIGHT COLUMN: SIDEBAR (DEADLINE & ACTIONS)
+    const sidebarCol = document.createElement('aside');
+    sidebarCol.className = 'detail-sidebar';
+
+    // 1. Deadline Card in Sidebar
+    const deadlineCard = document.createElement('div');
+    deadlineCard.className = 'sidebar-card';
+
+    const deadlineTitle = document.createElement('div');
+    deadlineTitle.className = 'sidebar-card-title';
+    deadlineTitle.innerHTML = `${SVG_ICONS.clock} <span>Action Deadline</span>`;
+    deadlineCard.appendChild(deadlineTitle);
+
+    if (notice.deadline) {
+        const deadlineDate = new Date(notice.deadline);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        deadlineDate.setHours(23, 59, 59, 999);
+        const diffDays = Math.ceil((deadlineDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+        const countdownBox = document.createElement('div');
+        countdownBox.className = 'sidebar-deadline-countdown';
+
+        let countdownText = '';
+        let progressWidth = '100%';
+        if (diffDays < 0) {
+            countdownText = 'Expired / Past Due';
+            progressWidth = '0%';
+        } else if (diffDays === 0) {
+            countdownText = 'Action Due Today';
+            progressWidth = '15%';
+        } else if (diffDays === 1) {
+            countdownText = 'Due Tomorrow (< 24h)';
+            progressWidth = '25%';
+        } else {
+            countdownText = `${diffDays} days remaining`;
+            progressWidth = `${Math.min(100, Math.max(20, diffDays * 10))}%`;
+        }
+        countdownBox.textContent = countdownText;
+        deadlineCard.appendChild(countdownBox);
+
+        const dateRow = document.createElement('div');
+        dateRow.className = 'sidebar-deadline-date';
+        dateRow.innerHTML = `${SVG_ICONS.calendar} <span>${notice.deadline}</span>`;
+        deadlineCard.appendChild(dateRow);
+
+        const progressTrack = document.createElement('div');
+        progressTrack.className = 'urgency-progress-track';
+        const progressBar = document.createElement('div');
+        progressBar.className = 'urgency-progress-bar';
+        progressBar.style.width = progressWidth;
+        progressTrack.appendChild(progressBar);
+        deadlineCard.appendChild(progressTrack);
+
+        const calBtn = document.createElement('button');
+        calBtn.className = 'btn-sidebar-action btn-sidebar-primary';
+        calBtn.innerHTML = `${SVG_ICONS.calendar} <span>Add to Calendar</span>`;
+        calBtn.addEventListener('click', () => openReminderModal(notice.id));
+        deadlineCard.appendChild(calBtn);
+    } else {
+        const noDeadline = document.createElement('p');
+        noDeadline.style.fontSize = '12.5px';
+        noDeadline.style.color = 'var(--text-secondary)';
+        noDeadline.style.lineHeight = '1.5';
+        noDeadline.textContent = 'This announcement does not have a hard deadline attached.';
+        deadlineCard.appendChild(noDeadline);
+    }
+
+    sidebarCol.appendChild(deadlineCard);
+
+    // 2. Modern Action Buttons Card
+    const actionsCard = document.createElement('div');
+    actionsCard.className = 'sidebar-card';
+
+    const actionsTitle = document.createElement('div');
+    actionsTitle.className = 'sidebar-card-title';
+    actionsTitle.textContent = 'Notice Actions';
+    actionsCard.appendChild(actionsTitle);
+
+    const btnGroup = document.createElement('div');
+    btnGroup.className = 'sidebar-action-btn-group';
+
+    // Share button
     const shareBtn = document.createElement('button');
-    shareBtn.textContent = '🔗 Share';
-    shareBtn.setAttribute('aria-label', 'Share Notice');
-    shareBtn.addEventListener('click', () => {
-        shareNotice(notice.id);
-    });
-    actions.appendChild(shareBtn);
+    shareBtn.className = 'btn-sidebar-action';
+    shareBtn.innerHTML = `${SVG_ICONS.share} <span>Share Notice</span>`;
+    shareBtn.addEventListener('click', () => shareNotice(notice.id));
+    btnGroup.appendChild(shareBtn);
 
-    // Remind Me button using addEventListener
-    const remindBtn = document.createElement('button');
-    remindBtn.textContent = '⏰ Remind Me';
-    remindBtn.setAttribute('aria-label', 'Remind Me');
-    remindBtn.addEventListener('click', () => {
-        addReminder(notice.id);
+    // Save / Bookmark button
+    const bookmarkBtn = document.createElement('button');
+    bookmarkBtn.className = `btn-sidebar-action ${isSaved ? 'saved' : ''}`;
+    bookmarkBtn.innerHTML = `${SVG_ICONS.bookmark} <span>${isSaved ? 'Saved to Bookmarks' : 'Save Notice'}</span>`;
+    bookmarkBtn.addEventListener('click', () => {
+        toggleBookmarkNotice(notice.id);
+        const nowSaved = appState.savedNotices.includes(notice.id);
+        bookmarkBtn.className = `btn-sidebar-action ${nowSaved ? 'saved' : ''}`;
+        bookmarkBtn.innerHTML = `${SVG_ICONS.bookmark} <span>${nowSaved ? 'Saved to Bookmarks' : 'Save Notice'}</span>`;
     });
-    actions.appendChild(remindBtn);
+    btnGroup.appendChild(bookmarkBtn);
 
-    // Admin Edit and Delete action buttons using addEventListener
+    // Archive button
+    const archiveBtn = document.createElement('button');
+    archiveBtn.className = 'btn-sidebar-action';
+    archiveBtn.innerHTML = `${SVG_ICONS.archive} <span>Archive Notice</span>`;
+    archiveBtn.addEventListener('click', () => toggleArchiveNotice(notice.id));
+    btnGroup.appendChild(archiveBtn);
+
+    // Admin Edit & Delete buttons
     if (appState.isAdmin) {
         const editBtn = document.createElement('button');
-        editBtn.className = 'btn-edit';
-        editBtn.textContent = '✏️ Edit Notice';
-        editBtn.setAttribute('aria-label', 'Edit Notice');
-        editBtn.addEventListener('click', () => {
-            openEditNotice(notice.id);
-        });
-        actions.appendChild(editBtn);
+        editBtn.className = 'btn-sidebar-action';
+        editBtn.innerHTML = `${SVG_ICONS.edit} <span>Edit Notice</span>`;
+        editBtn.addEventListener('click', () => openEditNotice(notice.id));
+        btnGroup.appendChild(editBtn);
 
         const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'btn-delete';
-        deleteBtn.textContent = '🗑️ Delete Notice';
-        deleteBtn.setAttribute('aria-label', 'Delete Notice');
-        deleteBtn.addEventListener('click', () => {
-            deleteNotice(notice.id);
-        });
-        actions.appendChild(deleteBtn);
+        deleteBtn.className = 'btn-sidebar-action btn-sidebar-delete';
+        deleteBtn.innerHTML = `${SVG_ICONS.trash} <span>Delete Notice</span>`;
+        deleteBtn.addEventListener('click', () => deleteNotice(notice.id));
+        btnGroup.appendChild(deleteBtn);
     }
 
-    container.appendChild(actions);
-    detail.appendChild(container);
+    actionsCard.appendChild(btnGroup);
+    sidebarCol.appendChild(actionsCard);
+
+    detailContainer.appendChild(sidebarCol);
 
     showScreen('detailScreen');
 }
 
-function filterNotices() {
-    const input = document.getElementById('searchInput');
-    const query = input ? input.value.trim().toLowerCase() : '';
-
-    if (appState.currentView === 'deadlines') {
-        if (!query) {
-            renderDeadlines();
-            return;
-        }
-        const filtered = appState.notices.filter(notice =>
-            notice.deadline && (
-                (notice.title && notice.title.toLowerCase().includes(query)) ||
-                (notice.content && notice.content.toLowerCase().includes(query)) ||
-                (notice.priority && notice.priority.toLowerCase().includes(query)) ||
-                (notice.deadline && notice.deadline.toLowerCase().includes(query))
-            )
-        );
-        renderDeadlines(filtered);
+// ===== BOOKMARK & ARCHIVE =====
+function toggleBookmarkNotice(id) {
+    const numId = Number(id);
+    const index = appState.savedNotices.indexOf(numId);
+    if (index === -1) {
+        appState.savedNotices.push(numId);
+        showToast('Saved to your bookmarks');
     } else {
-        if (!query) {
-            renderNotices(appState.notices);
-            return;
-        }
-        const filtered = appState.notices.filter(notice =>
-            (notice.title && notice.title.toLowerCase().includes(query)) ||
-            (notice.content && notice.content.toLowerCase().includes(query)) ||
-            (notice.priority && notice.priority.toLowerCase().includes(query))
-        );
-        renderNotices(filtered);
+        appState.savedNotices.splice(index, 1);
+        showToast('Removed from bookmarks');
     }
+    saveState();
 }
 
-// ===== DEADLINE TIMELINE VIEW =====
-function renderDeadlines(deadlinesToRender = null) {
-    const timeline = document.getElementById('deadlineTimeline');
-    if (!timeline) return;
-
-    // Securely clear previous children without innerHTML
-    while (timeline.firstChild) {
-        timeline.removeChild(timeline.firstChild);
-    }
-
-    const noticesWithDeadlines = (deadlinesToRender !== null ? deadlinesToRender : appState.notices)
-        .filter(n => n.deadline);
-
-    if (noticesWithDeadlines.length === 0) {
-        const emptyState = document.createElement('div');
-        emptyState.className = 'empty-state';
-
-        const icon = document.createElement('div');
-        icon.className = 'empty-state-icon';
-        icon.textContent = '📅';
-
-        const msg = document.createElement('p');
-        msg.textContent = 'No upcoming deadlines found';
-
-        emptyState.appendChild(icon);
-        emptyState.appendChild(msg);
-        timeline.appendChild(emptyState);
-        return;
-    }
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const enriched = noticesWithDeadlines.map(notice => {
-        const deadlineDate = new Date(notice.deadline);
-        deadlineDate.setHours(23, 59, 59, 999);
-        const diffMs = deadlineDate.getTime() - today.getTime();
-        const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-
-        let tier = 'later';
-        let urgencyLabel = '';
-        let badgeIcon = '⏳';
-
-        if (diffDays < 0) {
-            tier = 'expired';
-            urgencyLabel = 'Deadline Passed';
-            badgeIcon = '⚠️';
-        } else if (diffDays === 0) {
-            tier = 'urgent';
-            urgencyLabel = 'Due Today';
-            badgeIcon = '🚨';
-        } else if (diffDays === 1) {
-            tier = 'urgent';
-            urgencyLabel = 'Due Tomorrow (< 24h)';
-            badgeIcon = '🚨';
-        } else if (diffDays <= 2) {
-            tier = 'urgent';
-            urgencyLabel = `Due in ${diffDays} days (< 48h)`;
-            badgeIcon = '🚨';
-        } else if (diffDays <= 7) {
-            tier = 'upcoming';
-            urgencyLabel = `Due in ${diffDays} days (< 7d)`;
-            badgeIcon = '⏰';
-        } else {
-            tier = 'later';
-            const weeks = Math.round(diffDays / 7);
-            urgencyLabel = `Due in ${diffDays} days (${weeks} ${weeks === 1 ? 'wk' : 'wks'})`;
-            badgeIcon = '⏳';
-        }
-
-        return {
-            notice,
-            diffDays,
-            tier,
-            urgencyLabel,
-            badgeIcon,
-            formattedDate: deadlineDate.toLocaleDateString('en-GB', {
-                weekday: 'short',
-                day: 'numeric',
-                month: 'short',
-                year: 'numeric'
-            })
-        };
-    });
-
-    // Chronological sorting: upcoming nearest first (0, 1, 2, ...), expired last
-    enriched.sort((a, b) => {
-        if (a.diffDays >= 0 && b.diffDays >= 0) return a.diffDays - b.diffDays;
-        if (a.diffDays >= 0 && b.diffDays < 0) return -1;
-        if (a.diffDays < 0 && b.diffDays >= 0) return 1;
-        return b.diffDays - a.diffDays;
-    });
-
-    // Summary count bar
-    const urgentCount = enriched.filter(e => e.tier === 'urgent').length;
-    const upcomingCount = enriched.filter(e => e.tier === 'upcoming').length;
-    const laterCount = enriched.filter(e => e.tier === 'later').length;
-
-    const summaryBar = document.createElement('div');
-    summaryBar.className = 'timeline-summary';
-
-    if (urgentCount > 0) {
-        const chip = document.createElement('div');
-        chip.className = 'timeline-summary-chip urgent';
-        chip.textContent = `🚨 ${urgentCount} Urgent (<48h)`;
-        summaryBar.appendChild(chip);
-    }
-    if (upcomingCount > 0) {
-        const chip = document.createElement('div');
-        chip.className = 'timeline-summary-chip upcoming';
-        chip.textContent = `⏰ ${upcomingCount} Upcoming (<7d)`;
-        summaryBar.appendChild(chip);
-    }
-    if (laterCount > 0) {
-        const chip = document.createElement('div');
-        chip.className = 'timeline-summary-chip later';
-        chip.textContent = `⏳ ${laterCount} Later (>7d)`;
-        summaryBar.appendChild(chip);
-    }
-
-    timeline.appendChild(summaryBar);
-
-    // Timeline cards fragment
-    const fragment = document.createDocumentFragment();
-
-    enriched.forEach(item => {
-        const card = document.createElement('div');
-        card.className = `timeline-card tier-${item.tier}`;
-        card.setAttribute('role', 'button');
-        card.setAttribute('tabindex', '0');
-        card.setAttribute('aria-label', `Deadline: ${item.notice.title}, ${item.urgencyLabel}`);
-
-        card.addEventListener('click', () => {
-            viewNotice(item.notice.id);
-        });
-
-        card.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                viewNotice(item.notice.id);
-            }
-        });
-
-        // Header: Urgency badge & Date chip
-        const header = document.createElement('div');
-        header.className = 'timeline-header';
-
-        const badge = document.createElement('span');
-        badge.className = `urgency-badge ${item.tier}`;
-        badge.textContent = `${item.badgeIcon} ${item.urgencyLabel}`;
-
-        const dateChip = document.createElement('span');
-        dateChip.className = 'timeline-date-chip';
-        dateChip.textContent = `📅 ${item.formattedDate}`;
-
-        header.appendChild(badge);
-        header.appendChild(dateChip);
-
-        if (item.notice.attachment) {
-            const isPdf = item.notice.attachment.type === 'application/pdf' || (item.notice.attachment.name && item.notice.attachment.name.toLowerCase().endsWith('.pdf'));
-            const attachPill = document.createElement('span');
-            attachPill.className = 'attachment-pill';
-            attachPill.textContent = isPdf ? '📎 PDF Circular' : '📎 Timetable';
-            header.appendChild(attachPill);
-        }
-
-        card.appendChild(header);
-
-        // Title
-        const title = document.createElement('div');
-        title.className = 'timeline-title';
-        title.textContent = item.notice.title;
-        card.appendChild(title);
-
-        // Excerpt
-        const desc = document.createElement('div');
-        desc.className = 'timeline-desc';
-        desc.textContent = item.notice.content;
-        card.appendChild(desc);
-
-        // Footer with priority tag and action buttons
-        const footer = document.createElement('div');
-        footer.className = 'timeline-footer';
-
-        const prioSpan = document.createElement('span');
-        const prio = (item.notice.priority || 'medium').toLowerCase();
-        prioSpan.className = `notice-priority priority-${prio}`;
-        prioSpan.textContent = (item.notice.priority || 'medium').toUpperCase();
-        footer.appendChild(prioSpan);
-
-        const actions = document.createElement('div');
-        actions.className = 'timeline-actions';
-
-        const viewBtn = document.createElement('button');
-        viewBtn.className = 'btn-timeline-action';
-        viewBtn.textContent = '👁️ Details';
-        viewBtn.setAttribute('aria-label', 'View details');
-        viewBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            viewNotice(item.notice.id);
-        });
-        actions.appendChild(viewBtn);
-
-        const remindBtn = document.createElement('button');
-        remindBtn.className = 'btn-timeline-action';
-        remindBtn.textContent = '⏰ Remind';
-        remindBtn.setAttribute('aria-label', 'Remind me');
-        remindBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            addReminder(item.notice.id);
-        });
-        actions.appendChild(remindBtn);
-
-        if (appState.isAdmin) {
-            const editBtn = document.createElement('button');
-            editBtn.className = 'btn-timeline-action';
-            editBtn.textContent = '✏️ Edit';
-            editBtn.setAttribute('aria-label', 'Edit notice');
-            editBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                openEditNotice(item.notice.id);
-            });
-            actions.appendChild(editBtn);
-        }
-
-        footer.appendChild(actions);
-        card.appendChild(footer);
-
-        fragment.appendChild(card);
-    });
-
-    timeline.appendChild(fragment);
-}
-
-function submitNotice() {
-    if (!appState.isAdmin) {
-        showToast('Unauthorized: Only admins can manage notices');
-        return;
-    }
-
-    const noticeIdInput = document.getElementById('noticeId');
-    const titleInput = document.getElementById('noticeTitle');
-    const contentInput = document.getElementById('noticeContent');
-    const deadlineInput = document.getElementById('noticeDeadline');
-    const priorityInput = document.getElementById('noticePriority');
-
-    const editId = noticeIdInput && noticeIdInput.value ? Number(noticeIdInput.value) : null;
-    const title = titleInput ? titleInput.value.trim() : '';
-    const content = contentInput ? contentInput.value.trim() : '';
-    const deadline = deadlineInput ? deadlineInput.value : '';
-    const priority = priorityInput ? priorityInput.value : 'medium';
-
-    if (!title || !content) {
-        showToast('Please fill in both title and content');
-        return;
-    }
-
-    if (editId) {
-        // UPDATE existing notice
-        const index = appState.notices.findIndex(n => n.id === editId);
-        if (index === -1) {
-            showToast('Notice to update was not found');
-            return;
-        }
-
-        appState.notices[index].title = title;
-        appState.notices[index].content = content;
-        appState.notices[index].deadline = deadline || null;
-        appState.notices[index].priority = priority;
-        appState.notices[index].attachment = currentAdminAttachment || null;
-
-        saveNotices();
-        currentAdminAttachment = null;
-        showToast('Notice updated successfully!');
-        goHome();
-    } else {
-        // CREATE new notice
-        const maxId = appState.notices.reduce((max, n) => Math.max(max, Number(n.id) || 0), 0);
-        const authorName = appState.user && appState.user.username ? appState.user.username : 'Admin';
-
-        const newNotice = {
-            id: maxId + 1,
-            title,
-            content,
-            date: new Date().toISOString().split('T')[0],
-            deadline: deadline || null,
-            priority,
-            author: authorName,
-            attachment: currentAdminAttachment || null
-        };
-
-        appState.notices.unshift(newNotice);
-        saveNotices();
-        currentAdminAttachment = null;
-
-        showToast('Notice posted successfully!');
-        sendNotification(title);
+function toggleArchiveNotice(id) {
+    const numId = Number(id);
+    if (!appState.archivedNotices.includes(numId)) {
+        appState.archivedNotices.push(numId);
+        saveState();
+        showToast('Notice moved to archive');
         goHome();
     }
 }
 
-function deleteNotice(id) {
-    if (!appState.isAdmin) {
-        showToast('Only admins can delete notices');
-        return;
-    }
-
-    const notice = appState.notices.find(n => n.id === Number(id));
-    const noticeTitle = notice ? `"${notice.title}"` : 'this notice';
-
-    if (confirm(`Are you sure you want to delete ${noticeTitle}?`)) {
-        appState.notices = appState.notices.filter(n => n.id !== Number(id));
-        saveNotices();
-        showToast('Notice deleted successfully');
-        goHome();
-    }
-}
-
+// ===== SHARE NOTICE =====
 function shareNotice(id) {
     const notice = appState.notices.find(n => n.id === Number(id));
     if (!notice) return;
@@ -1271,19 +1374,19 @@ function shareNotice(id) {
     if (navigator.share) {
         navigator.share({
             title: notice.title,
-            text: `${notice.title}\n${notice.content}`,
+            text: `${notice.title}\n\n${notice.content}`,
             url: window.location.href
         }).catch(() => {});
     } else if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(`${notice.title}\n\n${notice.content}`)
-            .then(() => showToast('Notice copied to clipboard!'))
+            .then(() => showToast('Notice copied to clipboard'))
             .catch(() => showToast('Failed to copy notice'));
     } else {
-        showToast('Notice shared!');
+        showToast('Notice link ready');
     }
 }
 
-// ===== CALENDAR & REMINDER SYNC (.ics & GOOGLE CALENDAR) =====
+// ===== CALENDAR & REMINDER SYNC =====
 function openReminderModal(id) {
     const notice = appState.notices.find(n => n.id === Number(id));
     if (!notice) return;
@@ -1294,33 +1397,26 @@ function openReminderModal(id) {
     const modalTitle = document.getElementById('reminderModalTitle');
     const modalDate = document.getElementById('reminderModalDate');
 
-    if (modalTitle) {
-        modalTitle.textContent = notice.title;
-    }
-
+    if (modalTitle) modalTitle.textContent = notice.title;
     if (modalDate) {
         if (notice.deadline) {
-            modalDate.textContent = `⏰ Deadline: ${notice.deadline}`;
+            modalDate.textContent = `Action Deadline: ${notice.deadline}`;
             modalDate.style.color = 'var(--urgency-urgent)';
         } else {
-            modalDate.textContent = `📅 Notice Date: ${notice.date}`;
-            modalDate.style.color = 'var(--text-light)';
+            modalDate.textContent = `Announcement Date: ${notice.date}`;
+            modalDate.style.color = 'var(--text-secondary)';
         }
     }
 
-    if (modal) {
-        modal.style.display = 'flex';
-    }
+    if (modal) modal.style.display = 'flex';
 }
 
 function closeReminderModal(event) {
-    if (event && event.target && event.target.id !== 'reminderModal' && !event.target.classList.contains('modal-close-btn') && !event.target.classList.contains('btn-modal-cancel')) {
+    if (event && event.target && event.target.id !== 'reminderModal' && !event.target.classList.contains('modal-close-btn') && !event.target.classList.contains('btn-secondary')) {
         return;
     }
     const modal = document.getElementById('reminderModal');
-    if (modal) {
-        modal.style.display = 'none';
-    }
+    if (modal) modal.style.display = 'none';
 }
 
 function getGoogleCalendarUrl(notice) {
@@ -1352,7 +1448,7 @@ function addToGoogleCalendar() {
     const url = getGoogleCalendarUrl(notice);
     window.open(url, '_blank');
     closeReminderModal();
-    showToast('Opening Google Calendar...');
+    showToast('Opening Google Calendar');
 }
 
 function generateIcsContent(notice) {
@@ -1418,176 +1514,438 @@ function downloadIcsFile() {
         document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
         closeReminderModal();
-        showToast('Downloaded .ics! Open to add to calendar.');
+        showToast('Downloaded .ics calendar file');
     } catch (e) {
-        console.error('Error generating .ics:', e);
         showToast('Failed to generate calendar file');
     }
 }
 
-function addReminder(id) {
-    openReminderModal(id);
+// ===== ADMIN PANEL & FORM MANAGEMENT =====
+function selectFormCategory(cat) {
+    const input = document.getElementById('noticeCategory');
+    if (input) input.value = cat;
+
+    const group = document.getElementById('categorySelectorGroup');
+    if (group) {
+        group.querySelectorAll('.selector-badge').forEach(b => {
+            if (b.getAttribute('data-value') === cat) b.classList.add('active');
+            else b.classList.remove('active');
+        });
+    }
 }
 
-// ===== NOTIFICATIONS =====
-function toggleNotifications() {
-    appState.notificationsEnabled = !appState.notificationsEnabled;
-    saveState();
-    updateNotifToggle();
+function selectFormPriority(prio) {
+    const input = document.getElementById('noticePriority');
+    if (input) input.value = prio;
 
-    if (appState.notificationsEnabled && 'Notification' in window) {
+    const group = document.getElementById('prioritySelectorGroup');
+    if (group) {
+        group.querySelectorAll('.selector-badge').forEach(b => {
+            if (b.getAttribute('data-value') === prio) b.classList.add('active');
+            else b.classList.remove('active');
+        });
+    }
+}
+
+function formatEditorText(action) {
+    const textarea = document.getElementById('noticeContent');
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selected = textarea.value.substring(start, end);
+    let replacement = '';
+
+    switch (action) {
+        case 'bold':
+            replacement = `**${selected || 'bold text'}**`;
+            break;
+        case 'italic':
+            replacement = `*${selected || 'italic text'}*`;
+            break;
+        case 'heading':
+            replacement = `\n## ${selected || 'Section Heading'}\n`;
+            break;
+        case 'list':
+            replacement = `\n- ${selected || 'First item'}\n- Second item\n`;
+            break;
+        case 'quote':
+            replacement = `\n> ${selected || 'Important quoted note'}\n`;
+            break;
+        case 'divider':
+            replacement = `\n---\n`;
+            break;
+        default:
+            return;
+    }
+
+    textarea.setRangeText(replacement, start, end, 'end');
+    textarea.focus();
+}
+
+function handleAttachmentSelect(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    const MAX_SIZE = 2 * 1024 * 1024; // 2MB
+    if (file.size > MAX_SIZE) {
+        showToast('File size exceeds 2MB limit');
+        event.target.value = '';
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        currentAdminAttachment = {
+            name: file.name,
+            type: file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream'),
+            size: file.size,
+            data: e.target.result
+        };
+        showAdminAttachmentPreview(currentAdminAttachment);
+    };
+    reader.onerror = function() {
+        showToast('Failed to read file');
+    };
+    reader.readAsDataURL(file);
+}
+
+function showAdminAttachmentPreview(attachment) {
+    const container = document.getElementById('attachmentPreviewAdmin');
+    const name = document.getElementById('adminAttachmentName');
+    const size = document.getElementById('adminAttachmentSize');
+
+    if (!container) return;
+    if (name) name.textContent = attachment.name || 'Attachment';
+    if (size) size.textContent = `(${formatBytes(attachment.size)})`;
+
+    container.style.display = 'flex';
+}
+
+function removeAdminAttachment() {
+    currentAdminAttachment = null;
+    const fileInput = document.getElementById('noticeAttachment');
+    if (fileInput) fileInput.value = '';
+    const container = document.getElementById('attachmentPreviewAdmin');
+    if (container) container.style.display = 'none';
+    showToast('Attachment removed');
+}
+
+function openAdmin() {
+    if (!appState.isAdmin) {
+        showToast('Only administrators can publish notices');
+        return;
+    }
+
+    const titleHeader = document.getElementById('adminScreenTitle');
+    const submitBtn = document.getElementById('adminSubmitBtn');
+    const noticeIdInput = document.getElementById('noticeId');
+
+    if (titleHeader) titleHeader.textContent = 'Publish Announcement';
+    if (submitBtn) submitBtn.textContent = 'Publish Notice';
+    if (noticeIdInput) noticeIdInput.value = '';
+
+    document.getElementById('noticeTitle').value = '';
+    document.getElementById('noticeContent').value = '';
+    document.getElementById('noticeDeadline').value = '';
+    selectFormCategory('Academic');
+    selectFormPriority('medium');
+
+    currentAdminAttachment = null;
+    const fileInput = document.getElementById('noticeAttachment');
+    if (fileInput) fileInput.value = '';
+    const container = document.getElementById('attachmentPreviewAdmin');
+    if (container) container.style.display = 'none';
+
+    showScreen('adminScreen');
+}
+
+function openEditNotice(id) {
+    if (!appState.isAdmin) {
+        showToast('Only administrators can edit notices');
+        return;
+    }
+
+    const notice = appState.notices.find(n => n.id === Number(id));
+    if (!notice) {
+        showToast('Notice not found');
+        return;
+    }
+
+    const titleHeader = document.getElementById('adminScreenTitle');
+    const submitBtn = document.getElementById('adminSubmitBtn');
+    const noticeIdInput = document.getElementById('noticeId');
+    const titleInput = document.getElementById('noticeTitle');
+    const contentInput = document.getElementById('noticeContent');
+    const deadlineInput = document.getElementById('noticeDeadline');
+
+    if (titleHeader) titleHeader.textContent = 'Edit Announcement';
+    if (submitBtn) submitBtn.textContent = 'Save Changes';
+    if (noticeIdInput) noticeIdInput.value = notice.id;
+
+    if (titleInput) titleInput.value = notice.title || '';
+    if (contentInput) contentInput.value = notice.content || '';
+    if (deadlineInput) deadlineInput.value = notice.deadline || '';
+    selectFormCategory(notice.category || 'Academic');
+    selectFormPriority(notice.priority || 'medium');
+
+    const fileInput = document.getElementById('noticeAttachment');
+    if (fileInput) fileInput.value = '';
+
+    if (notice.attachment) {
+        currentAdminAttachment = { ...notice.attachment };
+        showAdminAttachmentPreview(currentAdminAttachment);
+    } else {
+        currentAdminAttachment = null;
+        const container = document.getElementById('attachmentPreviewAdmin');
+        if (container) container.style.display = 'none';
+    }
+
+    showScreen('adminScreen');
+}
+
+function submitNotice() {
+    if (!appState.isAdmin) {
+        showToast('Unauthorized: Admin access required');
+        return;
+    }
+
+    const noticeIdInput = document.getElementById('noticeId');
+    const titleInput = document.getElementById('noticeTitle');
+    const contentInput = document.getElementById('noticeContent');
+    const deadlineInput = document.getElementById('noticeDeadline');
+    const categoryInput = document.getElementById('noticeCategory');
+    const priorityInput = document.getElementById('noticePriority');
+
+    const editId = noticeIdInput && noticeIdInput.value ? Number(noticeIdInput.value) : null;
+    const title = titleInput ? titleInput.value.trim() : '';
+    const content = contentInput ? contentInput.value.trim() : '';
+    const deadline = deadlineInput ? deadlineInput.value : '';
+    const category = categoryInput ? categoryInput.value : 'Academic';
+    const priority = priorityInput ? priorityInput.value : 'medium';
+
+    if (!title || !content) {
+        showToast('Please enter both title and content');
+        return;
+    }
+
+    if (editId) {
+        // UPDATE existing
+        const index = appState.notices.findIndex(n => n.id === editId);
+        if (index === -1) {
+            showToast('Notice not found for update');
+            return;
+        }
+
+        appState.notices[index].title = title;
+        appState.notices[index].content = content;
+        appState.notices[index].deadline = deadline || null;
+        appState.notices[index].category = category;
+        appState.notices[index].priority = priority;
+        appState.notices[index].attachment = currentAdminAttachment || null;
+
+        saveNotices();
+        currentAdminAttachment = null;
+        showToast('Notice updated successfully');
+        goHome();
+    } else {
+        // CREATE new
+        const maxId = appState.notices.reduce((max, n) => Math.max(max, Number(n.id) || 0), 0);
+        const authorName = appState.user && appState.user.username ? appState.user.username.toUpperCase() : 'ADMIN';
+
+        const newNotice = {
+            id: maxId + 1,
+            title,
+            category,
+            content,
+            date: new Date().toISOString().split('T')[0],
+            deadline: deadline || null,
+            priority,
+            author: authorName,
+            attachment: currentAdminAttachment || null
+        };
+
+        appState.notices.unshift(newNotice);
+        saveNotices();
+        currentAdminAttachment = null;
+
+        showToast('Notice published successfully');
+        sendNotification(title);
+        goHome();
+    }
+}
+
+function deleteNotice(id) {
+    if (!appState.isAdmin) {
+        showToast('Only admins can delete notices');
+        return;
+    }
+
+    const notice = appState.notices.find(n => n.id === Number(id));
+    const title = notice ? `"${notice.title}"` : 'this notice';
+
+    if (confirm(`Are you sure you want to delete ${title}?`)) {
+        appState.notices = appState.notices.filter(n => n.id !== Number(id));
+        saveNotices();
+        showToast('Notice deleted successfully');
+        goHome();
+    }
+}
+
+// ===== SETTINGS & TABS =====
+function openSettings() {
+    switchSettingsTab(appState.activeSettingsTab || 'notifications');
+    const notifToggle = document.getElementById('notifToggleInput');
+    if (notifToggle) notifToggle.checked = appState.notificationsEnabled;
+    const notifSelect = document.getElementById('notifTime');
+    if (notifSelect) notifSelect.value = appState.notificationsTime || 'morning';
+    applyUrgencyColors();
+    showScreen('settingsScreen');
+}
+
+function switchSettingsTab(tabName) {
+    appState.activeSettingsTab = tabName;
+
+    // Update buttons
+    const tabBtns = {
+        notifications: document.getElementById('tabBtnNotifications'),
+        preferences: document.getElementById('tabBtnPreferences'),
+        about: document.getElementById('tabBtnAbout')
+    };
+
+    Object.keys(tabBtns).forEach(k => {
+        if (tabBtns[k]) {
+            if (k === tabName) {
+                tabBtns[k].classList.add('active');
+                tabBtns[k].setAttribute('aria-selected', 'true');
+            } else {
+                tabBtns[k].classList.remove('active');
+                tabBtns[k].setAttribute('aria-selected', 'false');
+            }
+        }
+    });
+
+    // Update panels
+    const panels = {
+        notifications: document.getElementById('settingsTabNotifications'),
+        preferences: document.getElementById('settingsTabPreferences'),
+        about: document.getElementById('settingsTabAbout')
+    };
+
+    Object.keys(panels).forEach(k => {
+        if (panels[k]) {
+            if (k === tabName) panels[k].style.display = 'block';
+            else panels[k].style.display = 'none';
+        }
+    });
+}
+
+function handleNotifToggleChange(isChecked) {
+    appState.notificationsEnabled = isChecked;
+    saveState();
+
+    if (isChecked && 'Notification' in window) {
         Notification.requestPermission().then(permission => {
             if (permission === 'granted') {
-                showToast('Notifications enabled');
+                showToast('Push notifications enabled');
             } else {
                 showToast('Notification permission denied by browser');
             }
         });
     } else {
-        showToast(appState.notificationsEnabled ? 'Notifications enabled' : 'Notifications disabled');
-    }
-}
-
-function updateNotifToggle() {
-    const toggle = document.getElementById('notifToggle');
-    if (!toggle) return;
-    if (appState.notificationsEnabled) {
-        toggle.classList.add('on');
-    } else {
-        toggle.classList.remove('on');
+        showToast(isChecked ? 'Notifications enabled' : 'Notifications disabled');
     }
 }
 
 function updateNotifTime() {
-    const timeSelect = document.getElementById('notifTime');
-    if (!timeSelect) return;
-    appState.notificationsTime = timeSelect.value;
+    const select = document.getElementById('notifTime');
+    if (!select) return;
+    appState.notificationsTime = select.value;
     saveState();
-    showToast('Notification time updated');
+    showToast(`Digest set to ${select.options[select.selectedIndex].text}`);
 }
 
 function sendNotification(title) {
-    if (!appState.notificationsEnabled || !('Notification' in window)) return;
-
-    if (Notification.permission === 'granted') {
-        try {
-            new Notification('Digital Notice Board', {
-                body: title,
-                icon: './icon-192.svg'
-            });
-        } catch (e) {
-            console.log('Notification trigger:', e);
-        }
+    if (!appState.notificationsEnabled) return;
+    if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('New College Notice', {
+            body: title,
+            icon: 'icon-192.png'
+        });
     }
 }
 
-// ===== PWA INSTALLATION & SERVICE WORKER =====
-let deferredInstallPrompt = null;
-
-function registerServiceWorker() {
-    if ('serviceWorker' in navigator && (window.location.protocol === 'http:' || window.location.protocol === 'https:')) {
-        const performRegistration = () => {
-            navigator.serviceWorker.register('./sw.js')
-                .then(registration => {
-                    console.log('Service Worker registered successfully with scope:', registration.scope);
-                    registration.update().catch(() => {});
-                })
-                .catch(err => {
-                    console.warn('Service Worker registration skipped or failed:', err);
-                });
-        };
-
-        if (document.readyState === 'complete') {
-            performRegistration();
-        } else {
-            window.addEventListener('load', performRegistration);
-        }
-    }
-}
-
+// ===== PWA INSTALLATION =====
 function setupPWAInstall() {
+    const installBtn = document.getElementById('installBtn');
+
     window.addEventListener('beforeinstallprompt', (e) => {
         e.preventDefault();
-        deferredInstallPrompt = e;
-
-        const installBtn = document.getElementById('installBtn');
-        if (installBtn) {
-            installBtn.style.display = 'flex';
-        }
+        deferredPrompt = e;
+        if (installBtn) installBtn.style.display = 'flex';
     });
 
     window.addEventListener('appinstalled', () => {
-        deferredInstallPrompt = null;
-        const installBtn = document.getElementById('installBtn');
-        if (installBtn) {
-            installBtn.style.display = 'none';
-        }
-        showToast('App installed successfully!');
+        deferredPrompt = null;
+        if (installBtn) installBtn.style.display = 'none';
+        showToast('App installed successfully');
     });
 }
 
 function promptInstallApp() {
-    if (!deferredInstallPrompt) {
-        showToast('App is already installed or browser installation not triggered yet.');
-        return;
-    }
-
-    deferredInstallPrompt.prompt();
-    deferredInstallPrompt.userChoice.then((choiceResult) => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then((choiceResult) => {
         if (choiceResult.outcome === 'accepted') {
-            console.log('User accepted the install prompt');
+            const installBtn = document.getElementById('installBtn');
+            if (installBtn) installBtn.style.display = 'none';
         }
-        deferredInstallPrompt = null;
-        const installBtn = document.getElementById('installBtn');
-        if (installBtn) {
-            installBtn.style.display = 'none';
-        }
+        deferredPrompt = null;
     });
 }
 
 // ===== PULL TO REFRESH =====
 function setupPullToRefresh() {
-    let startY = 0;
-    let canPull = false;
+    const homeScreen = document.getElementById('homeScreen');
+    if (!homeScreen) return;
 
-    document.addEventListener('touchstart', (e) => {
-        const homeScreen = document.getElementById('homeScreen');
-        const list = document.getElementById('noticeList');
-        const isHomeActive = homeScreen && homeScreen.classList.contains('active');
-
-        // Strictly verify window.scrollY === 0 and container is at top
-        const isWindowAtTop = (window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0) === 0;
-        const isListAtTop = (!list || list.scrollTop <= 0) && (!homeScreen || homeScreen.scrollTop <= 0);
-
-        if (isHomeActive && isWindowAtTop && isListAtTop && e.touches.length === 1) {
-            startY = e.touches[0].clientY;
-            canPull = true;
+    homeScreen.addEventListener('touchstart', (e) => {
+        const docScroll = window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0;
+        const screenScroll = homeScreen.scrollTop || 0;
+        if (docScroll === 0 && screenScroll === 0) {
+            touchStartY = e.touches[0].clientY;
         } else {
-            canPull = false;
+            touchStartY = -1;
         }
     }, { passive: true });
 
-    document.addEventListener('touchend', (e) => {
-        if (!canPull) return;
-        canPull = false;
+    homeScreen.addEventListener('touchend', (e) => {
+        if (touchStartY === -1) return;
+        const docScroll = window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0;
+        const screenScroll = homeScreen.scrollTop || 0;
+        touchEndY = e.changedTouches[0].clientY;
 
-        const homeScreen = document.getElementById('homeScreen');
-        if (!homeScreen || !homeScreen.classList.contains('active')) return;
-
-        // Strictly verify window.scrollY is still 0 at end of gesture
-        const currentWindowScrollY = window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0;
-        if (currentWindowScrollY !== 0) return;
-
-        const touchEndY = e.changedTouches[0].clientY;
-        const pullDistance = touchEndY - startY;
-
-        if (pullDistance > 80) {
+        if (docScroll === 0 && screenScroll === 0 && (touchEndY - touchStartY > 90)) {
             loadNotices();
-            clearSearch();
             showToast('Refreshed notice feed');
         }
     }, { passive: true });
 }
 
-// Start application on DOMContentLoaded
+// ===== SERVICE WORKER REGISTRATION =====
+function registerServiceWorker() {
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js')
+                .then(reg => {
+                    console.log('[PWA] Service Worker registered with scope:', reg.scope);
+                })
+                .catch(err => {
+                    console.error('[PWA] Service Worker registration failed:', err);
+                });
+        });
+    }
+}
+
+// Kick off when DOM is ready
 document.addEventListener('DOMContentLoaded', init);
