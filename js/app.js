@@ -253,7 +253,6 @@ function init() {
     setupRouting();
     setupOutsideClicks();
     initFirebase();
-    checkScheduledDailyDigest();
 
     // Check login state
     if (appState.user) {
@@ -263,7 +262,13 @@ function init() {
         }
         updateAdminControls();
         switchView(appState.currentView || 'feed');
+        checkScheduledDailyDigest();
+        if (appState.isAdmin) {
+            seedFirestoreIfEmpty();
+        }
     } else {
+        closeDigestModal();
+        dismissAlertBanner();
         showScreen('loginScreen', false);
         if (window.history && window.history.replaceState) {
             window.history.replaceState({ screen: 'loginScreen' }, '', '#loginScreen');
@@ -629,6 +634,10 @@ async function handleRegister() {
             updateSecurityPasscodeDisplay();
             showScreen('homeScreen', true);
             switchView(appState.currentView || 'feed');
+            checkScheduledDailyDigest();
+            if (isAdmin) {
+                seedFirestoreIfEmpty();
+            }
             showToast(`Welcome ${name}! Registered as ${isAdmin ? 'Faculty / Staff' : 'Student'}`);
             return;
         } catch (error) {
@@ -670,6 +679,10 @@ async function handleRegister() {
     updateSecurityPasscodeDisplay();
     showScreen('homeScreen', true);
     switchView(appState.currentView || 'feed');
+    checkScheduledDailyDigest();
+    if (isAdmin) {
+        seedFirestoreIfEmpty();
+    }
     showToast(`Account created! Signed in as ${isAdmin ? 'Faculty (Admin)' : 'Student'}`);
 }
 
@@ -696,6 +709,7 @@ async function handleLogin() {
         updateSecurityPasscodeDisplay();
         showScreen('homeScreen', true);
         switchView(appState.currentView || 'feed');
+        checkScheduledDailyDigest();
         showToast('Signed in as Student (Demo)');
         return;
     }
@@ -708,6 +722,8 @@ async function handleLogin() {
         updateSecurityPasscodeDisplay();
         showScreen('homeScreen', true);
         switchView(appState.currentView || 'feed');
+        checkScheduledDailyDigest();
+        seedFirestoreIfEmpty();
         showToast('Signed in as Faculty Admin (Demo)');
         return;
     }
@@ -747,6 +763,10 @@ async function handleLogin() {
             updateSecurityPasscodeDisplay();
             showScreen('homeScreen', true);
             switchView(appState.currentView || 'feed');
+            checkScheduledDailyDigest();
+            if (isAdmin) {
+                seedFirestoreIfEmpty();
+            }
             showToast(`Welcome back, ${appState.user.username}!`);
             return;
         } catch (error) {
@@ -776,6 +796,10 @@ async function handleLogin() {
         updateSecurityPasscodeDisplay();
         showScreen('homeScreen', true);
         switchView(appState.currentView || 'feed');
+        checkScheduledDailyDigest();
+        if (isAdmin) {
+            seedFirestoreIfEmpty();
+        }
         showToast(`Signed in as ${appState.user.username}`);
         return;
     }
@@ -788,6 +812,9 @@ function login() {
 }
 
 function logout() {
+    closeDigestModal();
+    dismissAlertBanner();
+
     if (typeof isFirebaseConfigured === 'function' && isFirebaseConfigured() && typeof fbAuth !== 'undefined' && fbAuth) {
         fbAuth.signOut().catch(err => console.warn('[Firebase Signout]', err));
     }
@@ -869,6 +896,34 @@ async function updateFacultyPasscode() {
     updateSecurityPasscodeDisplay();
     if (input) input.value = '';
     showToast(`Faculty passcode successfully updated to "${newCode}"`);
+}
+
+// ===== FIREBASE FIRESTORE SEEDING & SYNC =====
+async function seedFirestoreIfEmpty() {
+    if (!appState.isAdmin || typeof isFirebaseConfigured !== 'function' || !isFirebaseConfigured() || typeof fbDb === 'undefined' || !fbDb) return;
+    try {
+        const snap = await fbDb.collection('notices').limit(1).get();
+        if (snap.empty) {
+            console.log('[Firebase] Cloud Firestore is empty. Seeding official sample notices...');
+            const sample = getSampleNotices();
+            for (const n of sample) {
+                await fbDb.collection('notices').doc(String(n.id)).set(n);
+            }
+            console.log('[Firebase] Successfully seeded sample notices to Cloud Firestore.');
+        }
+    } catch (err) {
+        console.warn('[Firebase Seed Notice Warning]', err.message);
+    }
+}
+
+function resetDemoNoticeData() {
+    localStorage.removeItem('notices');
+    localStorage.removeItem('digestedNoticeIds');
+    localStorage.removeItem('alertedNoticeIds');
+    appState.digestedNoticeIds = [];
+    appState.alertedNoticeIds = [];
+    loadNotices();
+    showToast('Reset local notices to official sample data');
 }
 
 // ===== FIREBASE REAL-TIME SUBSCRIPTION & SYNC =====
@@ -2401,6 +2456,7 @@ function isNoticeUnder48Hours(notice) {
 
 // 1. Real-time In-App Banner Alerts
 function showAlertBanner(notice, reason, isUrgent = false) {
+    if (!appState.user) return;
     const banner = document.getElementById('alertBanner');
     const titleEl = document.getElementById('alertBannerTitle');
     const descEl = document.getElementById('alertBannerDesc');
@@ -2451,7 +2507,7 @@ function viewAlertBannerNotice() {
 
 // 2. Real-time Evaluation on Notice Post
 function evaluateNoticeForInstantAlert(notice) {
-    if (!notice) return false;
+    if (!appState.user || !notice) return false;
 
     const settings = appState.notificationSettings || {
         instantAlertsEnabled: true,
@@ -2532,6 +2588,10 @@ function evaluateNoticeForInstantAlert(notice) {
 
 // 3. Daily Digest (Scheduled 24h Summary)
 function triggerDailyDigestNow(isManual = false) {
+    if (!appState.user && !isManual) {
+        return;
+    }
+
     const settings = appState.notificationSettings || {
         dailyDigestEnabled: true,
         dailyDigestTime: 'morning',
@@ -2685,6 +2745,7 @@ function triggerTestInstantAlert() {
 
 // 5. Automatic Scheduled Digest Liveness Check
 function checkScheduledDailyDigest() {
+    if (!appState.user) return;
     const settings = appState.notificationSettings;
     if (!settings || !settings.dailyDigestEnabled) return;
 

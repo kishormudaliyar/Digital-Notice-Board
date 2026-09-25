@@ -11,12 +11,13 @@
 
 // 1. Firebase Project Credentials
 const firebaseConfig = {
-    apiKey: "YOUR_FIREBASE_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-    appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyCTCiIx5MfGt5vG1UlrAxqtf_dOALEdpwI",
+  authDomain: "notice-board-d3b6f.firebaseapp.com",
+  projectId: "notice-board-d3b6f",
+  storageBucket: "notice-board-d3b6f.firebasestorage.app",
+  messagingSenderId: "727521485500",
+  appId: "1:727521485500:web:ad7b41cda550938c6be6b9",
+  measurementId: "G-2PZRLY379D"
 };
 
 // 2. Institutional Security Configuration
