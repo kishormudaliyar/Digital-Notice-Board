@@ -8,6 +8,8 @@
 let appState = {
     user: null,
     isAdmin: false,
+    facultyPasscode: 'LDS-FACULTY-2026',
+    registeredUsers: [],
     notificationsEnabled: true,
     notificationsTime: 'morning',
     currentView: 'feed', // 'feed' | 'deadlines'
@@ -250,6 +252,7 @@ function init() {
     setupPullToRefresh();
     setupRouting();
     setupOutsideClicks();
+    initFirebase();
     checkScheduledDailyDigest();
 
     // Check login state
@@ -291,6 +294,8 @@ function loadState() {
         appState.notificationLogs = JSON.parse(localStorage.getItem('notificationLogs') || '[]');
         appState.alertedNoticeIds = JSON.parse(localStorage.getItem('alertedNoticeIds') || '[]');
         appState.digestedNoticeIds = JSON.parse(localStorage.getItem('digestedNoticeIds') || '[]');
+        appState.facultyPasscode = localStorage.getItem('facultyPasscode') || 'LDS-FACULTY-2026';
+        appState.registeredUsers = JSON.parse(localStorage.getItem('registeredUsers') || '[]');
     } catch (e) {
         console.error('Failed to parse state:', e);
     }
@@ -313,6 +318,8 @@ function saveState() {
         localStorage.setItem('notificationLogs', JSON.stringify(appState.notificationLogs || []));
         localStorage.setItem('alertedNoticeIds', JSON.stringify(appState.alertedNoticeIds || []));
         localStorage.setItem('digestedNoticeIds', JSON.stringify(appState.digestedNoticeIds || []));
+        localStorage.setItem('facultyPasscode', appState.facultyPasscode || 'LDS-FACULTY-2026');
+        localStorage.setItem('registeredUsers', JSON.stringify(appState.registeredUsers || []));
     } catch (e) {
         console.error('Failed to save state:', e);
     }
@@ -502,40 +509,304 @@ function getNoticeUrgencyInfo(notice) {
     }
 }
 
-// ===== AUTHENTICATION =====
-function login() {
-    const usernameInput = document.getElementById('usernameInput');
-    const username = usernameInput ? usernameInput.value.trim() : '';
+// ===== AUTHENTICATION & INSTITUTIONAL ACCESS CONTROL =====
 
-    if (!username) {
-        showToast('Please enter a username');
+function switchAuthTab(tab) {
+    const loginBtn = document.getElementById('authTabLoginBtn');
+    const signupBtn = document.getElementById('authTabSignupBtn');
+    const loginForm = document.getElementById('authLoginForm');
+    const signupForm = document.getElementById('authSignupForm');
+
+    if (tab === 'login') {
+        if (loginBtn) loginBtn.classList.add('active');
+        if (signupBtn) signupBtn.classList.remove('active');
+        if (loginForm) loginForm.style.display = 'block';
+        if (signupForm) signupForm.style.display = 'none';
+    } else {
+        if (signupBtn) signupBtn.classList.add('active');
+        if (loginBtn) loginBtn.classList.remove('active');
+        if (signupForm) signupForm.style.display = 'block';
+        if (loginForm) loginForm.style.display = 'none';
+    }
+}
+
+function selectRegisterRole(role) {
+    const roleInput = document.getElementById('registerRoleInput');
+    const roleBtnStudent = document.getElementById('roleBtnStudent');
+    const roleBtnFaculty = document.getElementById('roleBtnFaculty');
+    const facultyCodeGroup = document.getElementById('facultyCodeGroup');
+    const facultyCodeInput = document.getElementById('registerFacultyCodeInput');
+
+    if (roleInput) roleInput.value = role;
+
+    if (role === 'faculty') {
+        if (roleBtnFaculty) roleBtnFaculty.classList.add('active');
+        if (roleBtnStudent) roleBtnStudent.classList.remove('active');
+        if (facultyCodeGroup) facultyCodeGroup.style.display = 'block';
+        if (facultyCodeInput) facultyCodeInput.required = true;
+    } else {
+        if (roleBtnStudent) roleBtnStudent.classList.add('active');
+        if (roleBtnFaculty) roleBtnFaculty.classList.remove('active');
+        if (facultyCodeGroup) facultyCodeGroup.style.display = 'none';
+        if (facultyCodeInput) {
+            facultyCodeInput.required = false;
+            facultyCodeInput.value = '';
+        }
+    }
+}
+
+async function handleRegister() {
+    const roleInput = document.getElementById('registerRoleInput');
+    const nameInput = document.getElementById('registerNameInput');
+    const deptInput = document.getElementById('registerDeptInput');
+    const emailInput = document.getElementById('registerEmailInput');
+    const passwordInput = document.getElementById('registerPasswordInput');
+    const facultyCodeInput = document.getElementById('registerFacultyCodeInput');
+
+    const role = roleInput ? roleInput.value : 'student';
+    const name = nameInput ? nameInput.value.trim() : '';
+    const dept = deptInput ? deptInput.value.trim() : '';
+    const email = emailInput ? emailInput.value.trim().toLowerCase() : '';
+    const password = passwordInput ? passwordInput.value : '';
+    const facultyCode = facultyCodeInput ? facultyCodeInput.value.trim() : '';
+
+    if (!name || !email || !password) {
+        showToast('Please fill in all required fields');
         return;
     }
 
-    const cleanUsername = username.toLowerCase();
-    appState.user = { username: cleanUsername };
-    appState.isAdmin = cleanUsername === 'admin';
+    if (password.length < 6) {
+        showToast('Password must be at least 6 characters');
+        return;
+    }
+
+    // Role Verification: Faculty security passcode check
+    const activePasscode = appState.facultyPasscode || 'LDS-FACULTY-2026';
+    if (role === 'faculty') {
+        if (!facultyCode) {
+            showToast('Faculty Security Passcode is required for Staff registration');
+            return;
+        }
+        if (facultyCode !== activePasscode) {
+            showToast('Invalid Faculty Security Passcode! Contact HOD or Admin.');
+            return;
+        }
+    }
+
+    const isAdmin = (role === 'faculty');
+
+    // 1. Firebase Authentication & Firestore Registration
+    if (typeof isFirebaseConfigured === 'function' && isFirebaseConfigured() && typeof fbAuth !== 'undefined' && fbAuth) {
+        try {
+            showToast('Registering with Firebase...');
+            const userCredential = await fbAuth.createUserWithEmailAndPassword(email, password);
+            const user = userCredential.user;
+
+            await user.updateProfile({ displayName: name });
+
+            if (typeof fbDb !== 'undefined' && fbDb) {
+                await fbDb.collection('users').doc(user.uid).set({
+                    uid: user.uid,
+                    name: name,
+                    department: dept,
+                    email: email,
+                    role: isAdmin ? 'admin' : 'student',
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            }
+
+            appState.user = {
+                uid: user.uid,
+                username: name,
+                email: email,
+                role: isAdmin ? 'admin' : 'student',
+                department: dept
+            };
+            appState.isAdmin = isAdmin;
+            saveState();
+
+            updateAdminControls();
+            updateSecurityPasscodeDisplay();
+            showScreen('homeScreen', true);
+            switchView(appState.currentView || 'feed');
+            showToast(`Welcome ${name}! Registered as ${isAdmin ? 'Faculty / Staff' : 'Student'}`);
+            return;
+        } catch (error) {
+            console.error('[Firebase Registration Error]', error);
+            showToast(error.message || 'Registration failed with Firebase');
+            return;
+        }
+    }
+
+    // 2. Offline / Local Storage Registration Fallback
+    const existing = (appState.registeredUsers || []).find(u => u.email === email);
+    if (existing) {
+        showToast('An account with this email already exists');
+        return;
+    }
+
+    const newUser = {
+        id: Date.now(),
+        name,
+        department: dept,
+        email,
+        password,
+        role: isAdmin ? 'admin' : 'student'
+    };
+
+    appState.registeredUsers = appState.registeredUsers || [];
+    appState.registeredUsers.push(newUser);
+
+    appState.user = {
+        username: name,
+        email: email,
+        role: newUser.role,
+        department: dept
+    };
+    appState.isAdmin = isAdmin;
     saveState();
 
     updateAdminControls();
+    updateSecurityPasscodeDisplay();
     showScreen('homeScreen', true);
     switchView(appState.currentView || 'feed');
-    showToast(`Signed in as ${cleanUsername}`);
+    showToast(`Account created! Signed in as ${isAdmin ? 'Faculty (Admin)' : 'Student'}`);
+}
+
+async function handleLogin() {
+    const emailInput = document.getElementById('loginEmailInput') || document.getElementById('usernameInput');
+    const passwordInput = document.getElementById('loginPasswordInput') || document.getElementById('passwordInput');
+
+    const identifier = emailInput ? emailInput.value.trim() : '';
+    const password = passwordInput ? passwordInput.value : '';
+
+    if (!identifier) {
+        showToast('Please enter an email or username');
+        return;
+    }
+
+    const cleanId = identifier.toLowerCase();
+
+    // Quick Demo Mode shortcuts
+    if (cleanId === 'student') {
+        appState.user = { username: 'Student', email: 'student@college.edu', role: 'student' };
+        appState.isAdmin = false;
+        saveState();
+        updateAdminControls();
+        updateSecurityPasscodeDisplay();
+        showScreen('homeScreen', true);
+        switchView(appState.currentView || 'feed');
+        showToast('Signed in as Student (Demo)');
+        return;
+    }
+
+    if (cleanId === 'admin') {
+        appState.user = { username: 'Admin', email: 'admin@college.edu', role: 'admin' };
+        appState.isAdmin = true;
+        saveState();
+        updateAdminControls();
+        updateSecurityPasscodeDisplay();
+        showScreen('homeScreen', true);
+        switchView(appState.currentView || 'feed');
+        showToast('Signed in as Faculty Admin (Demo)');
+        return;
+    }
+
+    if (!password) {
+        showToast('Please enter your password');
+        return;
+    }
+
+    // 1. Firebase Authentication Login
+    if (typeof isFirebaseConfigured === 'function' && isFirebaseConfigured() && typeof fbAuth !== 'undefined' && fbAuth) {
+        try {
+            showToast('Authenticating with Firebase...');
+            const userCredential = await fbAuth.signInWithEmailAndPassword(identifier, password);
+            const user = userCredential.user;
+
+            let userData = { role: 'student' };
+            if (typeof fbDb !== 'undefined' && fbDb) {
+                const userDoc = await fbDb.collection('users').doc(user.uid).get();
+                if (userDoc.exists) {
+                    userData = userDoc.data();
+                }
+            }
+
+            const isAdmin = (userData.role === 'admin' || userData.role === 'faculty');
+            appState.user = {
+                uid: user.uid,
+                username: userData.name || user.displayName || user.email.split('@')[0],
+                email: user.email,
+                role: isAdmin ? 'admin' : 'student',
+                department: userData.department || ''
+            };
+            appState.isAdmin = isAdmin;
+            saveState();
+
+            updateAdminControls();
+            updateSecurityPasscodeDisplay();
+            showScreen('homeScreen', true);
+            switchView(appState.currentView || 'feed');
+            showToast(`Welcome back, ${appState.user.username}!`);
+            return;
+        } catch (error) {
+            console.error('[Firebase Signin Error]', error);
+            showToast(error.message || 'Firebase sign in failed');
+            return;
+        }
+    }
+
+    // 2. Offline / Local Storage User Lookup
+    const matchedUser = (appState.registeredUsers || []).find(u =>
+        (u.email === cleanId || (u.name && u.name.toLowerCase() === cleanId)) && u.password === password
+    );
+
+    if (matchedUser) {
+        const isAdmin = matchedUser.role === 'admin' || matchedUser.role === 'faculty';
+        appState.user = {
+            username: matchedUser.name || matchedUser.email.split('@')[0],
+            email: matchedUser.email,
+            role: isAdmin ? 'admin' : 'student',
+            department: matchedUser.department || ''
+        };
+        appState.isAdmin = isAdmin;
+        saveState();
+
+        updateAdminControls();
+        updateSecurityPasscodeDisplay();
+        showScreen('homeScreen', true);
+        switchView(appState.currentView || 'feed');
+        showToast(`Signed in as ${appState.user.username}`);
+        return;
+    }
+
+    showToast('Invalid credentials. Use demo "student" / "admin" or register an account.');
+}
+
+function login() {
+    handleLogin();
 }
 
 function logout() {
+    if (typeof isFirebaseConfigured === 'function' && isFirebaseConfigured() && typeof fbAuth !== 'undefined' && fbAuth) {
+        fbAuth.signOut().catch(err => console.warn('[Firebase Signout]', err));
+    }
+
     appState.user = null;
     appState.isAdmin = false;
     saveState();
 
     updateAdminControls();
-    const usernameInput = document.getElementById('usernameInput');
-    const passwordInput = document.getElementById('passwordInput');
-    if (usernameInput) usernameInput.value = 'student';
-    if (passwordInput) passwordInput.value = '';
+    updateSecurityPasscodeDisplay();
 
+    const loginEmailInput = document.getElementById('loginEmailInput');
+    const loginPasswordInput = document.getElementById('loginPasswordInput');
+    if (loginEmailInput) loginEmailInput.value = 'student';
+    if (loginPasswordInput) loginPasswordInput.value = '';
+
+    switchAuthTab('login');
     showScreen('loginScreen', true);
-    showToast('Signed out');
+    showToast('Signed out successfully');
 }
 
 function updateAdminControls() {
@@ -548,6 +819,131 @@ function updateAdminControls() {
     } else {
         if (topAddBtn) topAddBtn.classList.add('hidden');
         if (fab) fab.classList.add('hidden');
+    }
+}
+
+// ===== INSTITUTIONAL SECURITY & PASSCODE MANAGEMENT =====
+function updateSecurityPasscodeDisplay() {
+    const adminSecurityCard = document.getElementById('adminSecurityCard');
+    const displaySpan = document.getElementById('currentFacultyCodeDisplay');
+
+    if (adminSecurityCard) {
+        adminSecurityCard.style.display = appState.isAdmin ? 'block' : 'none';
+    }
+
+    if (displaySpan) {
+        displaySpan.textContent = `Active: ${appState.facultyPasscode || 'LDS-FACULTY-2026'}`;
+    }
+}
+
+async function updateFacultyPasscode() {
+    if (!appState.isAdmin) {
+        showToast('Only administrators can update the faculty passcode');
+        return;
+    }
+
+    const input = document.getElementById('newFacultyPasscodeInput');
+    const newCode = input ? input.value.trim() : '';
+
+    if (!newCode || newCode.length < 6) {
+        showToast('Passcode must be at least 6 characters long');
+        return;
+    }
+
+    appState.facultyPasscode = newCode;
+    saveState();
+
+    // Sync to Firestore if configured
+    if (typeof isFirebaseConfigured === 'function' && isFirebaseConfigured() && typeof fbDb !== 'undefined' && fbDb) {
+        try {
+            await fbDb.collection('system').doc('config').set({
+                facultyPasscode: newCode,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedBy: appState.user ? appState.user.username : 'admin'
+            }, { merge: true });
+        } catch (err) {
+            console.warn('[Firestore Passcode Sync Error]', err);
+        }
+    }
+
+    updateSecurityPasscodeDisplay();
+    if (input) input.value = '';
+    showToast(`Faculty passcode successfully updated to "${newCode}"`);
+}
+
+// ===== FIREBASE REAL-TIME SUBSCRIPTION & SYNC =====
+function initFirebase() {
+    if (typeof isFirebaseConfigured !== 'function' || !isFirebaseConfigured()) {
+        console.log('[NoticeBoard] Running in local offline mode (Firebase keys not yet configured).');
+        return;
+    }
+
+    // 1. Sync remote institutional config (Faculty Passcode)
+    if (typeof fbDb !== 'undefined' && fbDb) {
+        fbDb.collection('system').doc('config').onSnapshot((doc) => {
+            if (doc.exists && doc.data().facultyPasscode) {
+                appState.facultyPasscode = doc.data().facultyPasscode;
+                saveState();
+                updateSecurityPasscodeDisplay();
+            }
+        }, (err) => {
+            console.warn('[Firebase Config Sync]', err.message);
+        });
+
+        // 2. Real-time notices collection sync
+        fbDb.collection('notices').orderBy('id', 'desc').onSnapshot((snapshot) => {
+            if (!snapshot.empty) {
+                const cloudNotices = [];
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    cloudNotices.push({ ...data, firestoreId: doc.id });
+                });
+                if (cloudNotices.length > 0) {
+                    appState.notices = cloudNotices;
+                    saveNotices();
+                    renderNotices();
+                    if (appState.currentView === 'deadlines') {
+                        renderDeadlines();
+                    }
+                }
+            }
+        }, (err) => {
+            console.warn('[Firebase Notices Sync]', err.message);
+        });
+    }
+
+    // 3. Auth State Observer
+    if (typeof fbAuth !== 'undefined' && fbAuth) {
+        fbAuth.onAuthStateChanged(async (firebaseUser) => {
+            if (firebaseUser) {
+                try {
+                    let role = 'student';
+                    let dept = '';
+                    if (fbDb) {
+                        const userDoc = await fbDb.collection('users').doc(firebaseUser.uid).get();
+                        if (userDoc.exists) {
+                            const data = userDoc.data();
+                            role = data.role || 'student';
+                            dept = data.department || '';
+                        }
+                    }
+                    const isAdmin = (role === 'admin' || role === 'faculty');
+                    appState.user = {
+                        uid: firebaseUser.uid,
+                        username: firebaseUser.displayName || firebaseUser.email.split('@')[0],
+                        email: firebaseUser.email,
+                        role: isAdmin ? 'admin' : 'student',
+                        department: dept
+                    };
+                    appState.isAdmin = isAdmin;
+                    saveState();
+                    updateAdminControls();
+                    updateSecurityPasscodeDisplay();
+                } catch (e) {
+                    console.warn('[Firebase Auth State]', e);
+                }
+            }
+        });
     }
 }
 
@@ -1856,6 +2252,14 @@ function submitNotice() {
 
         saveNotices();
         currentAdminAttachment = null;
+
+        // Sync update with Firestore
+        if (typeof isFirebaseConfigured === 'function' && isFirebaseConfigured() && typeof fbDb !== 'undefined' && fbDb) {
+            fbDb.collection('notices').doc(String(editId)).set(appState.notices[index], { merge: true }).catch(err => {
+                console.warn('[Firestore Update Notice]', err);
+            });
+        }
+
         showToast('Notice updated successfully');
         goHome();
     } else {
@@ -1879,6 +2283,13 @@ function submitNotice() {
         saveNotices();
         currentAdminAttachment = null;
 
+        // Sync create with Firestore
+        if (typeof isFirebaseConfigured === 'function' && isFirebaseConfigured() && typeof fbDb !== 'undefined' && fbDb) {
+            fbDb.collection('notices').doc(String(newNotice.id)).set(newNotice).catch(err => {
+                console.warn('[Firestore Create Notice]', err);
+            });
+        }
+
         showToast('Notice published successfully');
         evaluateNoticeForInstantAlert(newNotice);
         goHome();
@@ -1900,6 +2311,14 @@ function deleteNotice(id) {
         appState.digestedNoticeIds = (appState.digestedNoticeIds || []).filter(item => item !== Number(id));
         saveNotices();
         saveState();
+
+        // Sync delete with Firestore
+        if (typeof isFirebaseConfigured === 'function' && isFirebaseConfigured() && typeof fbDb !== 'undefined' && fbDb) {
+            fbDb.collection('notices').doc(String(id)).delete().catch(err => {
+                console.warn('[Firestore Delete Notice]', err);
+            });
+        }
+
         showToast('Notice deleted successfully');
         goHome();
     }
@@ -1910,6 +2329,7 @@ function openSettings() {
     switchSettingsTab(appState.activeSettingsTab || 'notifications');
     loadNotificationSettings();
     applyUrgencyColors();
+    updateSecurityPasscodeDisplay();
     showScreen('settingsScreen');
 }
 
@@ -1951,6 +2371,8 @@ function switchSettingsTab(tabName) {
 
     if (tabName === 'notifications') {
         renderNotificationHistory();
+    } else if (tabName === 'preferences') {
+        updateSecurityPasscodeDisplay();
     }
 }
 

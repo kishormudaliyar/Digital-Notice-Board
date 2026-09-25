@@ -2119,6 +2119,137 @@ html, body {
     margin-top: 1px;
 }
 
+/* Auth Tabs (Sign In vs Create Account) */
+.auth-tabs {
+    display: flex;
+    background: #e2e8f0;
+    padding: 3px;
+    border-radius: var(--radius-md);
+    margin-bottom: 20px;
+    gap: 4px;
+}
+
+.auth-tab-btn {
+    flex: 1;
+    padding: 8px 12px;
+    border: none;
+    background: transparent;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-align: center;
+}
+
+.auth-tab-btn.active {
+    background: #ffffff;
+    color: var(--primary);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* Role Selector (Student vs Faculty/Staff) */
+.auth-role-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.role-selector-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 9px 12px;
+    border: 1.5px solid var(--border-medium);
+    border-radius: var(--radius-sm);
+    background: #ffffff;
+    color: var(--text-secondary);
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.role-selector-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent-hover);
+}
+
+.role-selector-btn.active {
+    border-color: var(--accent);
+    background: var(--accent-subtle);
+    color: var(--accent-hover);
+}
+
+/* Faculty Authorization Code Group */
+.faculty-code-group {
+    padding: 12px;
+    background: #f8fafc;
+    border: 1.5px dashed var(--accent);
+    border-radius: var(--radius-md);
+    animation: fadeInSlide 0.2s ease-out;
+}
+
+@keyframes fadeInSlide {
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.faculty-code-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.security-badge-pill {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    background: #fee2e2;
+    color: #b91c1c;
+    border-radius: var(--radius-pill);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.security-input {
+    font-family: monospace;
+    letter-spacing: 1px;
+}
+
+.input-hint {
+    display: block;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 5px;
+    line-height: 1.4;
+}
+
+/* Admin Passcode Rotation in Settings */
+.passcode-update-box {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+
+.passcode-update-box .form-group {
+    flex: 1;
+    min-width: 200px;
+    margin-bottom: 0;
+}
+
 /* ==========================================================================
    REAL-TIME IN-APP NOTIFICATION BANNER
    ========================================================================== */
